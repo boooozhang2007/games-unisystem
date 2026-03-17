@@ -62,6 +62,7 @@
     - read
     - update
     - delete
+    - encrypt
 - data：数据
     - user_jsons：用户数据库文件
         - user_id
@@ -84,5 +85,6 @@
             - asset_type
             - asset_description
     - market_json：商店物品数据
-        - items
-        - 
+        - item_id
+        - item_price
+        - item_publish_time
