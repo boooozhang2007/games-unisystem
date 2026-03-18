@@ -116,3 +116,10 @@
     - 用户数据
     - 游戏资产数据
     - 商店数据
+
+    可以使用jsonl文本格式，每一行保存一个结构体类型的数据，自定义追加写入和逐行读取函数实现数据持久化保存和读取
+
+## 7.编译
+
+请使用
+gcc -Wall -Wextra -g3 src/*.c -I./include -o src/output/main && ./src/output/main

@@ -16,8 +16,6 @@ int initial(char username[50])
     printf("请输入您的密码：");
     scanf("%s", passwd);
     user_register(username, passwd, age);
-
-    printf("欢迎来到unisystem，%s！\n", username);
     printf("这是一个基于C语言的游戏推荐和交易系统。\n");
     printf("请按照提示进行操作，享受您的unisystem之旅！\n");
     return 0;

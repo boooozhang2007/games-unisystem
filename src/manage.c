@@ -15,7 +15,7 @@ int user_register(char* username, char* passwd, int age)
             FILE *fp = fopen("data/users.json", "a");
             if (fp == NULL) return -1; // 文件打开失败
 
-            fprintf(fp, "{\"username\": \"%s\", \"passwd\": \"%s\", \"age\": %d}\n", username, passwd, age);
+            fprintf(fp, "{\"username\": \"%s\", \"passwd\": \"%s\", \"age\": %d},\n", username, passwd, age);
             fclose(fp);
             printf("注册成功！欢迎加入unisystem，%s！\n", username);
             return 0; // 注册成功
