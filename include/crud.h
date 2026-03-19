@@ -4,7 +4,7 @@
 void crud_init();
 void crud_add_game();
 void crud_list_all_games();
-int crud_search_user(char* username);
+char* crud_search_user(char* username);
 void crud_login_user();
 void crud_list_all_users();
 void crud_upgrade_user();

@@ -9,54 +9,57 @@ void crud_init()
     FILE *fp;
 
     // 检查数据文件是否存在
-    fp = fopen("data/users.json", "a");
+    fp = fopen("data/users.jsonl", "a");
     if (fp != NULL) fclose(fp);
     else
     {
         // 如果文件不存在则创建
-        fp = fopen("data/users.json", "w");
+        fp = fopen("data/users.jsonl", "w");
         if (fp) fclose(fp);
     }
 
-    fp = fopen("data/market.json", "a");
+    fp = fopen("data/market.jsonl", "a");
     if (fp != NULL) fclose(fp);
     else
     {
         // 如果文件不存在则创建
-        fp = fopen("data/market.json", "w");
+        fp = fopen("data/market.jsonl", "w");
         if (fp) fclose(fp);
     }
 
-    fp = fopen("data/games.json", "a");
+    fp = fopen("data/games.jsonl", "a");
     if (fp != NULL) fclose(fp);
     else
     {
         // 如果文件不存在则创建
-        fp = fopen("data/games.json", "w");
+        fp = fopen("data/games.jsonl", "w");
         if (fp) fclose(fp);
     }
     printf("CRUD初始化完成！\n");
 }
 
-/* crud注册用户函数 */
-int crud_search_user(char* username)
+/* crud搜索用户函数 */
+/* 返回值为用户数据行地址指针 */
+
+char* crud_search_user(char* username)
 {
-    char buffer[1024];
-    FILE *backup = fopen("data/users.json", "r");
-    if(backup == NULL) return -2; // 文件打开失败
+    static char buffer[1024];
+    FILE *backup = fopen("data/users.jsonl", "r");
+    if(backup == NULL) return NULL; // 文件打开失败
 
     char searched_username[256];
-    snprintf(searched_username, sizeof(searched_username), "\"username\": \"%s\"", username);
+    snprintf(searched_username, sizeof(searched_username), "{\"username\": \"%s\"", username);
 
     while(fgets(buffer, sizeof(buffer), backup) != NULL)
     {
-        if (strstr(buffer, searched_username) != NULL)
+        char *found = strstr(buffer, searched_username);
+        if (found != NULL)
         {
             fclose(backup);
-            return -1; // 用户名已存在
+            return found; // 用户名已存在
         }
     }
 
     fclose(backup);
-    return 0; // 用户名不存在
+    return NULL; // 用户名不存在
 }

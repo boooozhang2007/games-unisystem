@@ -12,7 +12,7 @@ typedef struct {
 
 
 int  user_register(char* username, char* passwd, int age);
-int  user_login(void);
+int  user_login(char* username, char* passwd);
 void user_list_all(void);
 int  user_upgrade(void);
 int  user_degrade(void);
