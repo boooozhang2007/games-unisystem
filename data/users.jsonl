@@ -1,3 +1,1 @@
-{"username": "boooo", "passwd": "123456", "age": 18},
-{"username": "test", "passwd": "666888", "age": 20},
-{"username": "123", "passwd": "1", "age": 1},
+{"id": 1, "username": "boooo", "passwd": "123456", "age": 18, "role": 2, "coins": 0, "assets": "", "friends": ""}

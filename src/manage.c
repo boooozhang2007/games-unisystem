@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <string.h>
-#include "../include/manage.h"
-#include "../include/crud.h"
+#include "manage.h"
+#include "crud.h"
+#include "models.h"
 
-/* 用户注册函数，需提供基本信息 */
+
+// 用户注册函数，需提供基本信息
 int user_register(char* username, char* passwd, int age)
 {
         if (crud_search_user(username) != NULL)
@@ -14,29 +16,30 @@ int user_register(char* username, char* passwd, int age)
         else
         {
             // 将新用户信息写入文件
-            FILE *fp = fopen("data/users.jsonl", "a");
-            if (fp == NULL) return -1; // 文件打开失败
+            users u;
+            
+            u.id = id();
+            strncpy(u.username, username, sizeof(u.username) - 1);
+            strncpy(u.passwd, passwd, sizeof(u.passwd) - 1);
+            u.age = age;
+            u.role = 0;
+            u.coins = 0;
 
-            fprintf(fp, "{\"username\": \"%s\", \"passwd\": \"%s\", \"age\": %d},\n", username, passwd, age);
-            fclose(fp);
+            if(crud_create_user(&u) == 0)
             printf("注册成功！欢迎加入unisystem，%s！\n", username);
             return 0; // 注册成功
         }
 }
 
-/* 用户登录函数，提供用户名和密码 */
+// 用户登录函数，提供用户名和密码
 int user_login(char* username, char* passwd)
 {
-    char scan_passwd[50] = {0};
-    char scan_username[50] = {0};
-    char* line = crud_search_user(username);
+    users* found = crud_search_user(username);
 
-    if(line == NULL) return -1;
+    if(found == NULL) return -1;
 
-    sscanf(line, "{\"username\": \"%[^\"]\", \"passwd\": \"%[^\"]\", \"age\": %*d},",scan_username, scan_passwd);
-    if(strcmp(scan_passwd, passwd) != 0)
+    if(strcmp(found->passwd, passwd) != 0)
     {
-        printf("密码错误，请重试。");
         return 1;
     }
     else{
