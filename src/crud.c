@@ -47,11 +47,11 @@ void crud_init()
 
     fp = fopen("data/id", "a");
     if(fp != NULL){
-        fprintf(fp, "%d", 0); // 初始化id为0
         fclose(fp);
     }
     else{
         fp = fopen("data/id", "w");
+        fprintf(fp, "%d", 0); // 初始化id为0
         if(fp) fclose(fp);
     }
     printf("CRUD初始化完成！\n");
