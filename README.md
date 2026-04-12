@@ -134,11 +134,14 @@ gcc -Wall -Wextra -g3 src/main.c src/crud.c src/manage.c src/trade.c -o unisyste
 
 已新增单文件版本 `unisystem_single.c`，适合课程作业提交或展示：
 该文件现在会聚合多文件实现，因此与多文件版功能保持一致。
-程序运行时会在当前运行目录自动生成：
-- `users.jsonl`
-- `market.jsonl`
-- `games.jsonl`
-- `id`
+程序运行时会在当前运行目录自动生成二进制数据文件：
+- `users.dat`
+- `market.dat`
+- `games.dat`
+- `trade_log.dat`
+- `invite_log.dat`
+- `id.dat`
+- `seed.dat`
 
 不需要手动创建 `data` 文件夹。
 

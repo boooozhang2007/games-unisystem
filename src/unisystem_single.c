@@ -1,1744 +1,1605 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
-//一些数量上限
+//数量上限
 #define MAX_USERS 500
+#define MAX_GAMES 100
+#define MAX_MARKET 200
 #define MAX_FRIENDS 100
 #define MAX_ASSETS 100
-#define MAX_GAMES 200
-#define MAX_MARKET_ITEMS 500
+
+//数据文件
+#define USER_FILE "users.dat"
+#define GAME_FILE "games.dat"
+#define MARKET_FILE "market.dat"
+#define TRADE_LOG_FILE "trade_log.dat"
+#define INVITE_LOG_FILE "invite_log.dat"
+#define ID_FILE "id.dat"
+#define SEED_FILE "seed.dat"
 
 //用户资料
 typedef struct {
+    int id;
     char username[50];
     char passwd[50];
-    int id;
     int age;
-    int role;//0是普通用户，1是VIP，2是管理员
-    int coins;//金币数
+    char identity[30];
+    char hobby[30];
+    int role;//0普通用户 1VIP 2管理员
+    int coins;
+    int game_hours;
+    int play_count;
+    int win_count;
     int friend_count;
     int asset_count;
-    int friends[MAX_FRIENDS];//好友ID
-    int assets[MAX_ASSETS];//道具ID
+    int friends[MAX_FRIENDS];
+    int assets[MAX_ASSETS];
 } users;
-
-//商店道具资料
-typedef struct {
-    int item_id;
-    char item_name[64];
-    int item_price;
-    int seller_id;
-    char publish_time[32];
-} market;
 
 //游戏资料
 typedef struct {
     int game_id;
-    char game_name[64];
-    char game_desc[256];
+    char game_name[50];
+    char game_type[30];
+    char game_desc[100];
+    int need_age;
 } games;
 
-//函数声明
-int crud_next_id(void);
+//市场资料
+typedef struct {
+    int item_id;
+    char item_name[50];
+    char item_type[30];
+    int item_price;
+    int seller_id;
+} market;
+
+//交易记录
+typedef struct {
+    int buyer_id;
+    int seller_id;
+    char buyer_name[50];
+    char seller_name[50];
+    int item_id;
+    char item_name[50];
+    char item_type[30];
+    int item_price;
+} trade_log;
+
+//好友邀约记录
+typedef struct {
+    int send_id;
+    int recv_id;
+    char send_name[50];
+    char recv_name[50];
+    char game_name[50];
+} invite_log;
+
+//crud部分
 void crud_init(void);
-int crud_save_line(int option, char* json_line);
-users* crud_find_user(char* username);
-int crud_add_user(users* u);
-int crud_edit_user_file(char* username, char* item);
+void crud_write_default_games(void);
+int crud_next_id(void);
+int crud_load_users(users list[]);
+void crud_save_users(users list[], int num);
+int crud_load_games(games list[]);
+int crud_load_market(market list[]);
+void crud_save_market(market list[], int num);
+int crud_load_trade_logs(trade_log list[]);
+void crud_add_trade_log(trade_log* log_data);
+int crud_load_invite_logs(invite_log list[]);
+void crud_add_invite_log(invite_log* log_data);
+int crud_find_user_index(users list[], int num, char username[]);
+int crud_find_user_id_index(users list[], int num, int id);
+int crud_find_market_index(market list[], int num, int item_id);
 
-int crud_read_user_line(char* line, users* out_user);
-int crud_make_user_line(users* u, char* out_line, int out_size);
-int crud_load_users(users* list, int max_count);
-int crud_save_users(users* list, int num);
-int crud_update_user(users* u);
-int crud_delete_user_file(char* username);
-
-int crud_load_games(games* list, int max_count);
-int crud_load_market(market* list, int max_count);
-int crud_save_market(market* list, int num);
-int crud_add_market_item(market* item);
-
-int manage_user_register(char* username, char* passwd, int age);
-int manage_user_login(char* username, char* passwd);
+//manage部分
+void manage_create_first_admin(void);
+int manage_make_captcha(char username[], int id);
+int manage_user_register(users* user);
+int manage_user_login(char username[], char passwd[]);
+int manage_get_win_rate(users* user);
+void manage_user_auto_upgrade(users* user);
+void manage_user_show_info(char username[]);
+int manage_user_edit_info(char username[]);
 void manage_user_list_all(void);
 int manage_user_upgrade(void);
 int manage_user_degrade(void);
 int manage_user_delete(void);
-void manage_user_show_info(char* username);
-int manage_user_edit_info(char* username);
-int manage_friend_add(char* username);
-int manage_friend_remove(char* username);
-void manage_friend_list(char* username);
+int manage_friend_add(char username[]);
+int manage_friend_remove(char username[]);
+void manage_friend_list(char username[]);
+int manage_friend_invite(char username[]);
+void manage_friend_show_invite(char username[]);
+void manage_show_recommend_games(char username[]);
+void manage_show_friend_menu(char username[]);
+void manage_show_user_info_menu(char username[]);
+void manage_show_admin_menu(void);
 
-void trade_menu(char* username);
+//trade部分
+void trade_show_market(void);
+void trade_show_log(char username[]);
+int trade_publish_item(char username[]);
+int trade_buy_item(char username[]);
+void trade_menu(char username[]);
 
-//数据文件名
-#define USER_FILE "users.jsonl"
-#define MARKET_FILE "market.jsonl"
-#define GAME_FILE "games.jsonl"
-#define ID_FILE "id"
+//main部分
+int main_show_menu(int role);
+void main_show_ranking(void);
+void main_first_register(char username[]);
 
-//基本小函数
-void crud_parse_int_list(char* text, int* crud_list, int* crud_num, int max_count)
-{
-    char crud_buffer[512];
-    char* crud_token;
-
-    *crud_num = 0;//先默认没有数据
-    if (text == NULL || text[0] == '\0') {
-        return;
-    }
-
-    strncpy(crud_buffer, text, sizeof(crud_buffer) - 1);//先把原字符串复制出来
-    crud_buffer[sizeof(crud_buffer) - 1] = '\0';
-
-    crud_token = strtok(crud_buffer, ",");//按逗号一个一个拆开
-    while (crud_token != NULL && *crud_num < max_count) {
-        while (*crud_token == ' ') {
-            crud_token++;
-        }
-        if (*crud_token != '\0') {
-            crud_list[*crud_num] = atoi(crud_token);
-            (*crud_num)++;
-        }
-        crud_token = strtok(NULL, ",");
-    }
-}
-
-void crud_build_int_list(int* crud_list, int crud_num, char* out, int out_size)
-{
-    int i;
-    out[0] = '\0';
-
-    for (i = 0; i < crud_num; i++) {//把整数数组重新拼成字符串
-        char part[32];
-        int written;
-
-        if (i > 0) {
-            if ((int)strlen(out) + 1 >= out_size) {
-                break;
-            }
-            strcat(out, ",");
-        }
-
-        written = snprintf(part, sizeof(part), "%d", crud_list[i]);
-        if (written <= 0) {
-            continue;
-        }
-
-        if ((int)strlen(out) + written >= out_size) {
-            break;
-        }
-        strcat(out, part);
-    }
-}
-
-void crud_extract_json_string_field(char* crud_line, char* key, char* out, int out_size)
-{
-    char* start;
-    char* end;
-    int len;
-
-    out[0] = '\0';//先清空输出
-    start = strstr(crud_line, key);
-    if (start == NULL) {
-        return;
-    }
-
-    start += (int)strlen(key);
-    end = strchr(start, '"');
-    if (end == NULL) {
-        return;
-    }
-
-    len = (int)(end - start);
-    if (len >= out_size) {
-        len = out_size - 1;
-    }
-
-    strncpy(out, start, len);
-    out[len] = '\0';
-}
-
-//检查数据文件
-int crud_check_data_files(void)
-{
-    FILE* crud_fp;
-
-    crud_fp = fopen(USER_FILE, "a");//检查用户文件
-    if (crud_fp == NULL) {
-        printf("用户文件创建失败。\n");
-        return -1;
-    }
-    fclose(crud_fp);
-
-    crud_fp = fopen(MARKET_FILE, "a");//检查商店文件
-    if (crud_fp == NULL) {
-        printf("找不到 market.jsonl 文件。\n");
-        return -1;
-    }
-    fclose(crud_fp);
-
-    crud_fp = fopen(GAME_FILE, "a");//检查游戏文件
-    if (crud_fp == NULL) {
-        printf("找不到 games.jsonl 文件。\n");
-        return -1;
-    }
-    fclose(crud_fp);
-
-    crud_fp = fopen(ID_FILE, "r");//检查编号文件
-    if (crud_fp == NULL) {
-        crud_fp = fopen(ID_FILE, "w");
-        if (crud_fp == NULL) {
-            printf("找不到 id 文件。\n");
-            return -1;
-        }
-        fprintf(crud_fp, "0");
-    }
-
-    if (crud_fp != NULL) {
-        fclose(crud_fp);
-    }
-
-    return 0;
-}
-
-//写入默认游戏数据
-void crud_write_default_games(void)
-{
-    FILE* crud_fp = fopen(GAME_FILE, "r");
-    int ch;
-    int crud_has_content = 0;
-
-    if (crud_fp == NULL) {//先看看文件能不能打开
-        return;
-    }
-
-    while ((ch = fgetc(crud_fp)) != EOF) {//只要有内容就不再重复写入
-        if (ch != ' ' && ch != '\n' && ch != '\r' && ch != '\t') {
-            crud_has_content = 1;
-            break;
-        }
-    }
-    fclose(crud_fp);
-
-    if (crud_has_content) {
-        return;
-    }
-
-    crud_fp = fopen(GAME_FILE, "w");
-    if (crud_fp == NULL) {
-        return;
-    }
-
-    fputs("{\"game_id\": 1, \"game_name\": \"Sky War\", \"game_desc\": \"快节奏多人竞技射击游戏\"}\n", crud_fp);
-    fputs("{\"game_id\": 2, \"game_name\": \"Farm World\", \"game_desc\": \"休闲经营类种田社交游戏\"}\n", crud_fp);
-    fputs("{\"game_id\": 3, \"game_name\": \"Magic Chess\", \"game_desc\": \"策略回合制卡牌对战游戏\"}\n", crud_fp);
-    fputs("{\"game_id\": 4, \"game_name\": \"Hero Road\", \"game_desc\": \"剧情向角色扮演冒险游戏\"}\n", crud_fp);
-    fclose(crud_fp);
-}
-
-int crud_have_user(void)
-{
-    FILE* crud_fp;
-    char crud_line[256];
-
-    crud_fp = fopen(USER_FILE, "r");//打开用户文件
-    if (crud_fp == NULL) {
-        return 0;
-    }
-
-    while (fgets(crud_line, sizeof(crud_line), crud_fp) != NULL) {//只要读到一行内容就说明已经有用户了
-        if (crud_line[0] != '\n' && crud_line[0] != '\r' && crud_line[0] != '\0') {
-            fclose(crud_fp);
-            return 1;
-        }
-    }
-
-    fclose(crud_fp);
-    return 0;
-}
-
-//第一次运行时先建管理员账号
-void crud_create_first_user(void)
-{
-    users admin = {0};
-    FILE* crud_fp;
-
-    if (crud_have_user()) {//如果已经有用户，就不用再创建
-        return;
-    }
-
-    admin.id = 1;//默认创建一个管理员
-    strcpy(admin.username, "admin");
-    strcpy(admin.passwd, "123456");
-    admin.age = 18;
-    admin.role = 2;
-    admin.coins = 1000;
-
-    crud_add_user(&admin);
-
-    crud_fp = fopen(ID_FILE, "w");
-    if (crud_fp != NULL) {
-        fprintf(crud_fp, "1");
-        fclose(crud_fp);
-    }
-
-    printf("第一次运行，系统里还没有用户。\n");
-    printf("已自动创建管理员账号：admin  密码：123456\n");
-}
-
-//生成新编号
-int crud_next_id(void)
-{
-    FILE* crud_fp;
-    int crud_id_num = 0;
-
-    crud_init();//先保证数据文件都准备好了
-
-    crud_fp = fopen(ID_FILE, "r");//读出当前编号
-    if (crud_fp != NULL) {
-        if (fscanf(crud_fp, "%d", &crud_id_num) != 1) {
-            crud_id_num = 0;
-        }
-        fclose(crud_fp);
-    }
-
-    crud_id_num++;//编号加1再写回去
-
-    crud_fp = fopen(ID_FILE, "w");
-    if (crud_fp == NULL) {
-        return -1;
-    }
-
-    fprintf(crud_fp, "%d", crud_id_num);
-    fclose(crud_fp);
-
-    return crud_id_num;
-}
-
-//程序开始时先初始化
+//这个函数是程序一开始要先调用的
+//主要就是把后面要用到的数据文件先准备好
 void crud_init(void)
 {
-    if (crud_check_data_files() != 0) {
-        return;
+    FILE* fp;
+    int id_value = 0;
+
+    fp = fopen(USER_FILE, "ab");
+    if (fp != NULL) {
+        fclose(fp);
+    }
+
+    fp = fopen(MARKET_FILE, "ab");
+    if (fp != NULL) {
+        fclose(fp);
+    }
+
+    fp = fopen(TRADE_LOG_FILE, "ab");
+    if (fp != NULL) {
+        fclose(fp);
+    }
+
+    fp = fopen(INVITE_LOG_FILE, "ab");
+    if (fp != NULL) {
+        fclose(fp);
+    }
+
+    fp = fopen(GAME_FILE, "ab");
+    if (fp != NULL) {
+        fclose(fp);
+    }
+
+    fp = fopen(ID_FILE, "rb");
+    if (fp == NULL) {
+        fp = fopen(ID_FILE, "wb");
+        if (fp != NULL) {
+            fwrite(&id_value, sizeof(int), 1, fp);
+            fclose(fp);
+        }
+    } else {
+        fclose(fp);
+    }
+
+    id_value = 1357;
+    fp = fopen(SEED_FILE, "rb");
+    if (fp == NULL) {
+        fp = fopen(SEED_FILE, "wb");
+        if (fp != NULL) {
+            fwrite(&id_value, sizeof(int), 1, fp);
+            fclose(fp);
+        }
+    } else {
+        fclose(fp);
     }
 
     crud_write_default_games();
-    crud_create_first_user();
 }
 
-int crud_save_line(int option, char* json_line)
+//这里是写默认游戏数据的
+//如果游戏文件里还没有内容，就先放几款热门游戏进去
+void crud_write_default_games(void)
 {
-    char* crud_path;
-    FILE* crud_fp;
+    FILE* fp;
+    long size;
+    games first_game;
+    games list[6] = {
+        {1, "王者荣耀", "竞技", "5V5多人在线竞技游戏", 12},
+        {2, "原神", "冒险", "开放世界角色扮演游戏", 12},
+        {3, "第五人格", "竞技", "非对称对抗竞技游戏", 12},
+        {4, "和平精英", "竞技", "多人战术射击游戏", 12},
+        {5, "蛋仔派对", "休闲", "多人闯关休闲派对游戏", 6},
+        {6, "阴阳师", "养成", "和风卡牌养成策略游戏", 12}
+    };
+    int num;
 
-    switch (option) {//根据选项决定写到哪个文件
-    case 1:
-        crud_path = USER_FILE;
-        break;
-    case 2:
-        crud_path = MARKET_FILE;
-        break;
-    case 3:
-        crud_path = GAME_FILE;
-        break;
-    default:
-        return -2;
+    fp = fopen(GAME_FILE, "rb");
+    if (fp == NULL) {
+        return;
     }
 
-    crud_fp = fopen(crud_path, "a");
-    if (crud_fp == NULL) {
-        return -3;
-    }
+    fseek(fp, 0, SEEK_END);
+    size = ftell(fp);
 
-    fprintf(crud_fp, "%s\n", json_line);
-    fclose(crud_fp);
-    return 0;
-}
-
-int crud_read_user_line(char* crud_line, users* out_user)
-{
-    char crud_assets_text[512] = "";
-    char crud_friends_text[512] = "";
-    int crud_matched;
-    users temp = {0};
-
-    if (crud_line == NULL || out_user == NULL) {
-        return -1;
-    }
-
-    *out_user = temp;//先清空结构体
-
-    crud_matched = sscanf(crud_line,//先按现在的格式读
-                     "{\"id\": %d, \"username\": \"%49[^\"]\", \"passwd\": \"%49[^\"]\", \"age\": %d, \"role\": %d, \"coins\": %d",
-                     &out_user->id,
-                     out_user->username,
-                     out_user->passwd,
-                     &out_user->age,
-                     &out_user->role,
-                     &out_user->coins);
-
-    if (crud_matched != 6) {
-        return -1;
-    }
-
-    crud_extract_json_string_field(crud_line, "\"assets\": \"", crud_assets_text, sizeof(crud_assets_text));
-    crud_extract_json_string_field(crud_line, "\"friends\": \"", crud_friends_text, sizeof(crud_friends_text));
-
-    crud_parse_int_list(crud_assets_text, out_user->assets, &out_user->asset_count, MAX_ASSETS);
-    crud_parse_int_list(crud_friends_text, out_user->friends, &out_user->friend_count, MAX_FRIENDS);
-    return 0;
-}
-
-int crud_make_user_line(users* u, char* out_line, int out_size)
-{
-    char crud_assets_text[512];
-    char crud_friends_text[512];
-    int written;
-
-    if (u == NULL || out_line == NULL || out_size <= 0) {
-        return -1;
-    }
-
-    crud_build_int_list(u->assets, u->asset_count, crud_assets_text, sizeof(crud_assets_text));
-    crud_build_int_list(u->friends, u->friend_count, crud_friends_text, sizeof(crud_friends_text));
-
-    written = snprintf(out_line,
-                       out_size,
-                       "{\"id\": %d, \"username\": \"%s\", \"passwd\": \"%s\", \"age\": %d, \"role\": %d, \"coins\": %d, \"assets\": \"%s\", \"friends\": \"%s\"}",
-                       u->id,
-                       u->username,
-                       u->passwd,
-                       u->age,
-                       u->role,
-                       u->coins,
-                       crud_assets_text,
-                       crud_friends_text);
-
-    if (written < 0 || written >= out_size) {
-        return -2;
-    }
-    return 0;
-}
-
-int crud_load_users(users* crud_list, int max_count)
-{
-    FILE* crud_fp;
-    char crud_line[2048];
-    int crud_num = 0;
-
-    if (crud_list == NULL || max_count <= 0) {
-        return -1;
-    }
-
-    crud_init();
-
-    crud_fp = fopen(USER_FILE, "r");
-    if (crud_fp == NULL) {
-        return 0;
-    }
-
-    while (fgets(crud_line, sizeof(crud_line), crud_fp) != NULL) {//逐行读取用户数据
-        users u;
-
-        if (crud_read_user_line(crud_line, &u) == 0) {
-            if (crud_num < max_count) {
-                crud_list[crud_num++] = u;
+    if (size > 0) {
+        rewind(fp);
+        if (fread(&first_game, sizeof(games), 1, fp) == 1) {
+            if (strcmp(first_game.game_name, "王者荣耀") == 0) {
+                fclose(fp);
+                return;
             }
         }
     }
+    fclose(fp);
 
-    fclose(crud_fp);
-    return crud_num;
+    fp = fopen(GAME_FILE, "wb");
+    if (fp == NULL) {
+        return;
+    }
+
+    num = sizeof(list) / sizeof(list[0]);
+    fwrite(list, sizeof(games), num, fp);
+    fclose(fp);
 }
 
-int crud_save_users(users* crud_list, int crud_num)
+//这个函数专门用来生成新的编号
+//每次注册用户或者上架道具时都会用到
+int crud_next_id(void)
 {
-    FILE* crud_fp;
-    int i;
+    FILE* fp;
+    int id_value = 0;
 
-    crud_init();
-
-    crud_fp = fopen(USER_FILE, "w");
-    if (crud_fp == NULL) {
+    fp = fopen(ID_FILE, "rb");
+    if (fp == NULL) {
         return -1;
     }
 
-    for (i = 0; i < crud_num; i++) {//重新把所有用户写回文件
-        char crud_line[2048];
-
-        if (crud_make_user_line(&crud_list[i], crud_line, sizeof(crud_line)) == 0) {
-            fprintf(crud_fp, "%s\n", crud_line);
-        }
+    if (fread(&id_value, sizeof(int), 1, fp) != 1) {
+        id_value = 0;
     }
+    fclose(fp);
 
-    fclose(crud_fp);
-    return 0;
-}
+    id_value++;
 
-users* crud_find_user(char* username)
-{
-    static users target_user;
-    users crud_list[MAX_USERS];
-    int crud_num;
-    int i;
-
-    if (username == NULL) {
-        return NULL;
-    }
-
-    crud_num = crud_load_users(crud_list, MAX_USERS);//把文件里的用户全部读出来再查找
-    if (crud_num < 0) {
-        return NULL;
-    }
-
-    for (i = 0; i < crud_num; i++) {
-        if (strcmp(crud_list[i].username, username) == 0) {
-            target_user = crud_list[i];
-            return &target_user;
-        }
-    }
-
-    return NULL;
-}
-
-int crud_add_user(users* u)
-{
-    char crud_line[2048];
-
-    if (u == NULL) {
-        return -1;
-    }
-    //先把结构体转成一行字符串
-    if (crud_make_user_line(u, crud_line, sizeof(crud_line)) != 0) {
-        return -2;
-    }
-
-    return crud_save_line(1, crud_line);
-}
-
-int crud_update_user(users* u)
-{
-    users crud_list[MAX_USERS];
-    int crud_num;
-    int i;
-
-    if (u == NULL) {
+    fp = fopen(ID_FILE, "wb");
+    if (fp == NULL) {
         return -1;
     }
 
-    crud_num = crud_load_users(crud_list, MAX_USERS);
-    if (crud_num < 0) {
-        return -2;
-    }
+    fwrite(&id_value, sizeof(int), 1, fp);
+    fclose(fp);
 
-    for (i = 0; i < crud_num; i++) {//找到这个用户后再覆盖保存
-        if (crud_list[i].id == u->id || strcmp(crud_list[i].username, u->username) == 0) {
-            crud_list[i] = *u;
-            return crud_save_users(crud_list, crud_num);
-        }
-    }
-
-    return -3;
+    return id_value;
 }
 
-int crud_delete_user_file(char* username)
+//这个函数负责把所有用户从文件里读到数组里
+//后面查找、修改、登录基本都要先调用它
+int crud_load_users(users list[])
 {
-    users crud_list[MAX_USERS];
-    int crud_num;
-    int i;
+    FILE* fp;
+    int num = 0;
+    users one_user;
 
-    if (username == NULL) {
-        return -1;
-    }
-
-    crud_num = crud_load_users(crud_list, MAX_USERS);
-    if (crud_num < 0) {
-        return -2;
-    }
-
-    for (i = 0; i < crud_num; i++) {
-        if (strcmp(crud_list[i].username, username) == 0) {
-            int j;
-            for (j = i; j < crud_num - 1; j++) {
-                crud_list[j] = crud_list[j + 1];
-            }
-            crud_num--;
-            return crud_save_users(crud_list, crud_num);
-        }
-    }
-
-    return -3;
-}
-
-int crud_edit_user_file(char* username, char* item)
-{
-    users* u;
-    users updated;
-
-    if (username == NULL || item == NULL) {
-        return -1;
-    }
-
-    u = crud_find_user(username);
-    if (u == NULL) {
-        return -2;
-    }
-
-    updated = *u;
-
-    if (strncmp(item, "age=", 4) == 0) {
-        updated.age = atoi(item + 4);
-    } else if (strncmp(item, "coins=", 6) == 0) {
-        updated.coins = atoi(item + 6);
-    } else if (strncmp(item, "role=", 5) == 0) {
-        updated.role = atoi(item + 5);
-    } else if (strncmp(item, "passwd=", 7) == 0) {
-        strncpy(updated.passwd, item + 7, sizeof(updated.passwd) - 1);
-        updated.passwd[sizeof(updated.passwd) - 1] = '\0';
-    } else {
-        return -3;
-    }
-
-    return crud_update_user(&updated);
-}
-
-int crud_load_games(games* crud_list, int max_count)
-{
-    FILE* crud_fp;
-    char crud_line[2048];
-    int crud_num = 0;
-
-    if (crud_list == NULL || max_count <= 0) {
-        return -1;
-    }
-
-    crud_init();
-
-    crud_fp = fopen(GAME_FILE, "r");
-    if (crud_fp == NULL) {
+    fp = fopen(USER_FILE, "rb");
+    if (fp == NULL) {
         return 0;
     }
 
-    while (fgets(crud_line, sizeof(crud_line), crud_fp) != NULL) {
-        games g = {0};
-        int crud_matched = sscanf(crud_line,
-                             "{\"game_id\": %d, \"game_name\": \"%63[^\"]\", \"game_desc\": \"%255[^\"]\"}",
-                             &g.game_id,
-                             g.game_name,
-                             g.game_desc);
-        if (crud_matched == 3 && crud_num < max_count) {
-            crud_list[crud_num++] = g;
+    while (fread(&one_user, sizeof(users), 1, fp) == 1) {
+        if (num < MAX_USERS) {
+            list[num] = one_user;
+            num++;
         }
     }
 
-    fclose(crud_fp);
-    return crud_num;
+    fclose(fp);
+    return num;
 }
 
-int crud_load_market(market* crud_list, int max_count)
+//这个函数负责把用户数组重新写回文件
+//当用户信息有变化时就保存一次
+void crud_save_users(users list[], int num)
 {
-    FILE* crud_fp;
-    char crud_line[1024];
-    int crud_num = 0;
+    FILE* fp;
 
-    if (crud_list == NULL || max_count <= 0) {
-        return -1;
+    fp = fopen(USER_FILE, "wb");
+    if (fp == NULL) {
+        return;
     }
 
-    crud_init();
+    if (num > 0) {
+        fwrite(list, sizeof(users), num, fp);
+    }
 
-    crud_fp = fopen(MARKET_FILE, "r");
-    if (crud_fp == NULL) {
+    fclose(fp);
+}
+
+//读取全部游戏数据
+//推荐游戏和好友邀约时会用到
+int crud_load_games(games list[])
+{
+    FILE* fp;
+    int num = 0;
+    games one_game;
+
+    fp = fopen(GAME_FILE, "rb");
+    if (fp == NULL) {
         return 0;
     }
 
-    while (fgets(crud_line, sizeof(crud_line), crud_fp) != NULL) {
-        market m = {0};
-        int crud_matched = sscanf(crud_line,
-                             "{\"item_id\": %d, \"item_name\": \"%63[^\"]\", \"item_price\": %d, \"seller_id\": %d, \"publish_time\": \"%31[^\"]\"}",
-                             &m.item_id,
-                             m.item_name,
-                             &m.item_price,
-                             &m.seller_id,
-                             m.publish_time);
-
-        if (crud_matched != 5) {
-            crud_matched = sscanf(crud_line,
-                             "{\"item_id\": %d, \"item_price\": %d, \"publish_time\": \"%31[^\"]\"}",
-                             &m.item_id,
-                             &m.item_price,
-                             m.publish_time);
-            if (crud_matched == 3) {
-                strcpy(m.item_name, "未知道具");
-                m.seller_id = 0;
-            }
-        }
-
-        if ((crud_matched == 5 || crud_matched == 3) && crud_num < max_count) {
-            crud_list[crud_num++] = m;
+    while (fread(&one_game, sizeof(games), 1, fp) == 1) {
+        if (num < MAX_GAMES) {
+            list[num] = one_game;
+            num++;
         }
     }
 
-    fclose(crud_fp);
-    return crud_num;
+    fclose(fp);
+    return num;
 }
 
-int crud_save_market(market* crud_list, int crud_num)
+//读取市场里的全部道具
+//进入交易菜单时会先读这里的数据
+int crud_load_market(market list[])
 {
-    FILE* crud_fp;
+    FILE* fp;
+    int num = 0;
+    market one_item;
+
+    fp = fopen(MARKET_FILE, "rb");
+    if (fp == NULL) {
+        return 0;
+    }
+
+    while (fread(&one_item, sizeof(market), 1, fp) == 1) {
+        if (num < MAX_MARKET) {
+            list[num] = one_item;
+            num++;
+        }
+    }
+
+    fclose(fp);
+    return num;
+}
+
+//读取交易记录
+//这样用户就可以看到自己买过和卖过什么
+int crud_load_trade_logs(trade_log list[])
+{
+    FILE* fp;
+    int num = 0;
+    trade_log log_data;
+
+    fp = fopen(TRADE_LOG_FILE, "rb");
+    if (fp == NULL) {
+        return 0;
+    }
+
+    while (fread(&log_data, sizeof(trade_log), 1, fp) == 1) {
+        if (num < MAX_MARKET) {
+            list[num] = log_data;
+            num++;
+        }
+    }
+
+    fclose(fp);
+    return num;
+}
+
+//读取好友邀约记录
+//查看邀约历史的时候会用到
+int crud_load_invite_logs(invite_log list[])
+{
+    FILE* fp;
+    int num = 0;
+    invite_log log_data;
+
+    fp = fopen(INVITE_LOG_FILE, "rb");
+    if (fp == NULL) {
+        return 0;
+    }
+
+    while (fread(&log_data, sizeof(invite_log), 1, fp) == 1) {
+        if (num < MAX_MARKET) {
+            list[num] = log_data;
+            num++;
+        }
+    }
+
+    fclose(fp);
+    return num;
+}
+
+//把市场数组重新保存到文件里
+//上架和购买后都要更新这里
+void crud_save_market(market list[], int num)
+{
+    FILE* fp;
+
+    fp = fopen(MARKET_FILE, "wb");
+    if (fp == NULL) {
+        return;
+    }
+
+    if (num > 0) {
+        fwrite(list, sizeof(market), num, fp);
+    }
+
+    fclose(fp);
+}
+
+//这里是追加一条交易记录
+//每次购买成功后就往文件后面加一条
+void crud_add_trade_log(trade_log* log_data)
+{
+    FILE* fp;
+
+    if (log_data == NULL) {
+        return;
+    }
+
+    fp = fopen(TRADE_LOG_FILE, "ab");
+    if (fp == NULL) {
+        return;
+    }
+
+    fwrite(log_data, sizeof(trade_log), 1, fp);
+    fclose(fp);
+}
+
+//这里是追加一条好友邀约记录
+//有人发起邀约时就在这里保存
+void crud_add_invite_log(invite_log* log_data)
+{
+    FILE* fp;
+
+    if (log_data == NULL) {
+        return;
+    }
+
+    fp = fopen(INVITE_LOG_FILE, "ab");
+    if (fp == NULL) {
+        return;
+    }
+
+    fwrite(log_data, sizeof(invite_log), 1, fp);
+    fclose(fp);
+}
+
+//按用户名在数组里找用户位置
+//找到就返回下标，找不到就返回-1
+int crud_find_user_index(users list[], int num, char username[])
+{
     int i;
 
-    crud_init();
-
-    crud_fp = fopen(MARKET_FILE, "w");
-    if (crud_fp == NULL) {
-        return -1;
-    }
-
-    for (i = 0; i < crud_num; i++) {
-        fprintf(crud_fp,
-                "{\"item_id\": %d, \"item_name\": \"%s\", \"item_price\": %d, \"seller_id\": %d, \"publish_time\": \"%s\"}\n",
-                crud_list[i].item_id,
-                crud_list[i].item_name,
-                crud_list[i].item_price,
-                crud_list[i].seller_id,
-                crud_list[i].publish_time);
-    }
-
-    fclose(crud_fp);
-    return 0;
-}
-
-int crud_add_market_item(market* item)
-{
-    char crud_line[1024];
-
-    if (item == NULL) {
-        return -1;
-    }
-
-    snprintf(crud_line,
-             sizeof(crud_line),
-             "{\"item_id\": %d, \"item_name\": \"%s\", \"item_price\": %d, \"seller_id\": %d, \"publish_time\": \"%s\"}",
-             item->item_id,
-             item->item_name,
-             item->item_price,
-             item->seller_id,
-             item->publish_time);
-
-    return crud_save_line(2, crud_line);
-}
-
-int manage_find_user_pos_by_name(users* crud_list, int crud_num, char* username)
-{
-    int i;
-    for (i = 0; i < crud_num; i++) {
-        if (strcmp(crud_list[i].username, username) == 0) {
+    for (i = 0; i < num; i++) {
+        if (strcmp(list[i].username, username) == 0) {
             return i;
         }
     }
+
     return -1;
 }
 
-int manage_find_user_pos_by_id(users* crud_list, int crud_num, int id_value)
+//按用户编号查找位置
+//显示好友名字和市场卖家时会用到
+int crud_find_user_id_index(users list[], int num, int id)
 {
     int i;
-    for (i = 0; i < crud_num; i++) {
-        if (crud_list[i].id == id_value) {
+
+    for (i = 0; i < num; i++) {
+        if (list[i].id == id) {
             return i;
         }
     }
+
     return -1;
 }
 
-int manage_is_friend(users* u, int friend_id)
+//按道具ID查市场里的位置
+//购买道具时要先找到是哪一个道具
+int crud_find_market_index(market list[], int num, int item_id)
 {
     int i;
-    for (i = 0; i < u->friend_count; i++) {
-        if (u->friends[i] == friend_id) {
-            return 1;
+
+    for (i = 0; i < num; i++) {
+        if (list[i].item_id == item_id) {
+            return i;
         }
     }
-    return 0;
+
+    return -1;
 }
 
-//用户和好友功能
-char* manage_role_name(int role)
+//如果系统里还没有任何用户
+//这里会自动建一个默认管理员，方便第一次使用
+void manage_create_first_admin(void)
 {
-    if (role == 2) {
-        return "管理员";
+    users list[MAX_USERS];
+    int num;
+    users admin = {0};
+
+    num = crud_load_users(list);
+    if (num > 0) {
+        return;
     }
-    if (role == 1) {
-        return "VIP";
-    }
-    return "普通用户";
+
+    admin.id = crud_next_id();
+    strcpy(admin.username, "admin");
+    strcpy(admin.passwd, "123456");
+    strcpy(admin.identity, "manager");
+    strcpy(admin.hobby, "竞技");
+    admin.age = 20;
+    admin.role = 2;
+    admin.coins = 1000;
+    admin.game_hours = 200;
+    admin.play_count = 50;
+    admin.win_count = 30;
+
+    list[0] = admin;
+    crud_save_users(list, 1);
+
+    printf("第一次运行，已自动创建管理员账号。\n");
+    printf("账号：admin  密码：123456\n");
 }
 
-//用户注册
-int manage_user_register(char* username, char* manage_passwd, int manage_age)
+//这里做一个简单的伪随机验证码
+//不是完全随机，但每次登录生成的数字会变化
+int manage_make_captcha(char username[], int id)
 {
-    users u = {0};
+    FILE* fp;
+    int seed = 1357;
+    int code = 0;
+    int i;
 
-    if (username == NULL || manage_passwd == NULL || manage_age <= 0) {//先检查输入
-        printf("注册信息无效。\n");
-        return -1;
+    fp = fopen(SEED_FILE, "rb");
+    if (fp != NULL) {
+        if (fread(&seed, sizeof(int), 1, fp) != 1) {
+            seed = 1357;
+        }
+        fclose(fp);
     }
 
-    if (crud_find_user(username) != NULL) {
-        printf("用户名已存在，请选择其他用户名。\n");
-        return -2;
+    for (i = 0; username[i] != '\0'; i++) {
+        seed = seed * 17 + username[i] + id;
+        seed = seed % 10000;
     }
 
-    u.id = crud_next_id();//给新用户设置初始信息
-    if (u.id < 0) {
-        printf("系统初始化失败，注册失败。\n");
-        return -3;
+    seed = seed * 31 + id * 7 + 97;
+    seed = seed % 10000;
+    code = seed % 9000;
+    code = code + 1000;
+
+    fp = fopen(SEED_FILE, "wb");
+    if (fp != NULL) {
+        fwrite(&seed, sizeof(int), 1, fp);
+        fclose(fp);
     }
 
-    strncpy(u.username, username, sizeof(u.username) - 1);
-    strncpy(u.passwd, manage_passwd, sizeof(u.passwd) - 1);
-    u.age = manage_age;
-    u.role = 0;
-    u.coins = 100;
-    u.friend_count = 0;
-    u.asset_count = 0;
+    return code;
+}
 
-    if (crud_add_user(&u) == 0) {
-        printf("注册成功！欢迎加入unisystem，%s！\n", username);
-        printf("系统赠送 100 金币，祝你玩得开心！\n");
+//根据总对局和胜场算胜率
+//这里直接返回整数百分比，方便显示
+int manage_get_win_rate(users* user)
+{
+    if (user == NULL) {
         return 0;
     }
 
-    printf("注册失败，请稍后重试。\n");
-    return -4;
+    if (user->play_count <= 0) {
+        return 0;
+    }
+
+    return user->win_count * 100 / user->play_count;
 }
 
-//用户登录
-int manage_user_login(char* username, char* manage_passwd)
+//用户注册函数
+//把输入的资料整理好以后保存到用户文件里
+int manage_user_register(users* user)
 {
-    users* manage_target_user = crud_find_user(username);
+    users list[MAX_USERS];
+    int num;
 
-    if (manage_target_user == NULL) {//先找有没有这个人
+    if (user == NULL) {
         return -1;
     }
 
-    if (strcmp(manage_target_user->passwd, manage_passwd) != 0) {
+    num = crud_load_users(list);
+    if (crud_find_user_index(list, num, user->username) >= 0) {
+        printf("用户名已存在。\n");
+        return -1;
+    }
+
+    user->id = crud_next_id();
+    user->role = 0;
+    user->coins = 100;
+    user->friend_count = 0;
+    user->asset_count = 0;
+    user->game_hours = 0;
+    user->play_count = 0;
+    user->win_count = 0;
+
+    list[num] = *user;
+    num++;
+    crud_save_users(list, num);
+
+    printf("注册成功。\n");
+    return 0;
+}
+
+//用户登录函数
+//先检查密码，再检查验证码
+int manage_user_login(char username[], char passwd[])
+{
+    users list[MAX_USERS];
+    int num;
+    int pos;
+    int code;
+    int input_code;
+
+    num = crud_load_users(list);
+    pos = crud_find_user_index(list, num, username);
+    if (pos < 0) {
+        return -1;
+    }
+
+    if (strcmp(list[pos].passwd, passwd) != 0) {
         printf("密码错误。\n");
-        return 1;
+        return -1;
     }
 
-    printf("登录成功！欢迎回来，%s！\n", username);
+    code = manage_make_captcha(username, list[pos].id);
+    printf("验证码：%d\n", code);
+    printf("请输入验证码：");
+    scanf("%d", &input_code);
+    if (input_code != code) {
+        printf("验证码错误。\n");
+        return -1;
+    }
+
+    printf("登录成功。\n");
     return 0;
 }
 
+//这里做自动升级
+//普通用户只要游戏时长够或者胜率够，就会升成VIP
+void manage_user_auto_upgrade(users* user)
+{
+    int rate;
+
+    if (user == NULL) {
+        return;
+    }
+
+    rate = manage_get_win_rate(user);
+
+    if (user->role == 0) {
+        if (user->game_hours >= 100 || rate >= 60) {
+            user->role = 1;
+        }
+    }
+}
+
+//显示当前用户的详细信息
+//包括画像、游戏时长、胜率、好友数这些内容
+void manage_user_show_info(char username[])
+{
+    users list[MAX_USERS];
+    int num;
+    int pos;
+    int rate;
+
+    num = crud_load_users(list);
+    pos = crud_find_user_index(list, num, username);
+    if (pos < 0) {
+        printf("用户不存在。\n");
+        return;
+    }
+
+    rate = manage_get_win_rate(&list[pos]);
+
+    printf("\n个人信息\n");
+    printf("编号：%d\n", list[pos].id);
+    printf("用户名：%s\n", list[pos].username);
+    printf("年龄：%d\n", list[pos].age);
+    printf("身份/职业：%s\n", list[pos].identity);
+    printf("爱好：%s\n", list[pos].hobby);
+    printf("角色：%d\n", list[pos].role);
+    printf("金币：%d\n", list[pos].coins);
+    printf("游戏时长：%d\n", list[pos].game_hours);
+    printf("总对局：%d\n", list[pos].play_count);
+    printf("胜场：%d\n", list[pos].win_count);
+    printf("胜率：%d%%\n", rate);
+    printf("好友数：%d\n", list[pos].friend_count);
+    printf("资产数：%d\n", list[pos].asset_count);
+}
+
+//这个函数让用户自己修改信息
+//除了基本资料，也可以顺便录入游戏时长和胜负情况
+int manage_user_edit_info(char username[])
+{
+    users list[MAX_USERS];
+    int num;
+    int pos;
+    int choice;
+    int add_hours;
+    int add_play;
+    int add_win;
+    char text[50];
+
+    num = crud_load_users(list);
+    pos = crud_find_user_index(list, num, username);
+    if (pos < 0) {
+        printf("用户不存在。\n");
+        return -1;
+    }
+
+    printf("\n1.改密码\n");
+    printf("2.改年龄\n");
+    printf("3.改身份\n");
+    printf("4.改爱好\n");
+    printf("5.录入游戏时长\n");
+    printf("6.录入胜负记录\n");
+    printf("7.充值金币\n");
+    printf("0.返回\n");
+    printf("请输入选择：");
+    scanf("%d", &choice);
+
+    if (choice == 1) {
+        printf("请输入新密码：");
+        scanf("%49s", text);
+        strcpy(list[pos].passwd, text);
+    } else if (choice == 2) {
+        printf("请输入新年龄：");
+        scanf("%d", &list[pos].age);
+    } else if (choice == 3) {
+        printf("请输入新身份或职业：");
+        scanf("%29s", text);
+        strcpy(list[pos].identity, text);
+    } else if (choice == 4) {
+        printf("请输入新爱好：");
+        scanf("%29s", text);
+        strcpy(list[pos].hobby, text);
+    } else if (choice == 5) {
+        printf("请输入新增游戏时长：");
+        scanf("%d", &add_hours);
+        if (add_hours > 0) {
+            list[pos].game_hours += add_hours;
+        }
+    } else if (choice == 6) {
+        printf("请输入新增对局数：");
+        scanf("%d", &add_play);
+        printf("请输入新增胜场数：");
+        scanf("%d", &add_win);
+        if (add_play > 0 && add_win >= 0 && add_win <= add_play) {
+            list[pos].play_count += add_play;
+            list[pos].win_count += add_win;
+        }
+    } else if (choice == 7) {
+        printf("请输入充值金币：");
+        scanf("%d", &add_hours);
+        if (add_hours > 0) {
+            list[pos].coins += add_hours;
+        }
+    } else {
+        return 0;
+    }
+
+    manage_user_auto_upgrade(&list[pos]);
+    crud_save_users(list, num);
+    printf("修改完成。\n");
+    return 0;
+}
+
+//管理员查看全部用户
+//这里主要是为了管理方便
 void manage_user_list_all(void)
 {
-    users manage_list[MAX_USERS];
-    int manage_num;
+    users list[MAX_USERS];
+    int num;
     int i;
 
-    manage_num = crud_load_users(manage_list, MAX_USERS);
-    if (manage_num <= 0) {
-        printf("当前没有用户数据。\n");
+    num = crud_load_users(list);
+    if (num <= 0) {
+        printf("没有用户数据。\n");
         return;
     }
 
-    printf("\n用户列表：\n");
+    printf("\n用户列表\n");
     printf("ID\t用户名\t年龄\t角色\t金币\n");
-    for (i = 0; i < manage_num; i++) {
-        printf("%d\t%s\t%d\t%s\t%d\n",
-               manage_list[i].id,
-               manage_list[i].username,
-               manage_list[i].age,
-               manage_role_name(manage_list[i].role),
-               manage_list[i].coins);
+    for (i = 0; i < num; i++) {
+        printf("%d\t%s\t%d\t%d\t%d\n",
+               list[i].id,
+               list[i].username,
+               list[i].age,
+               list[i].role,
+               list[i].coins);
     }
 }
 
+//管理员手动升级用户
+//和自动升级不同，这里是直接改角色等级
 int manage_user_upgrade(void)
 {
+    users list[MAX_USERS];
+    int num;
+    int pos;
     char username[50];
-    users manage_list[MAX_USERS];
-    int manage_num;
-    int manage_pos;
 
+    num = crud_load_users(list);
     printf("请输入要升级的用户名：");
     scanf("%49s", username);
-
-    manage_num = crud_load_users(manage_list, MAX_USERS);
-    if (manage_num <= 0) {
-        printf("用户数据为空。\n");
+    pos = crud_find_user_index(list, num, username);
+    if (pos < 0) {
+        printf("用户不存在。\n");
         return -1;
     }
 
-    manage_pos = manage_find_user_pos_by_name(manage_list, manage_num, username);
-    if (manage_pos < 0) {
-        printf("用户不存在。\n");
-        return -2;
+    if (list[pos].role < 2) {
+        list[pos].role++;
     }
 
-    if (manage_list[manage_pos].role >= 2) {
-        printf("该用户已经是最高等级。\n");
-        return -3;
-    }
-
-    manage_list[manage_pos].role++;//把角色往上升一级
-    if (crud_save_users(manage_list, manage_num) == 0) {
-        printf("升级成功：%s 当前角色：%s\n", username, manage_role_name(manage_list[manage_pos].role));
-        return 0;
-    }
-
-    printf("升级失败。\n");
-    return -4;
+    crud_save_users(list, num);
+    printf("升级完成。\n");
+    return 0;
 }
 
+//管理员手动降级用户
+//如果需要恢复普通权限就可以在这里操作
 int manage_user_degrade(void)
 {
+    users list[MAX_USERS];
+    int num;
+    int pos;
     char username[50];
-    users manage_list[MAX_USERS];
-    int manage_num;
-    int manage_pos;
 
+    num = crud_load_users(list);
     printf("请输入要降级的用户名：");
     scanf("%49s", username);
-
-    manage_num = crud_load_users(manage_list, MAX_USERS);
-    if (manage_num <= 0) {
-        printf("用户数据为空。\n");
+    pos = crud_find_user_index(list, num, username);
+    if (pos < 0) {
+        printf("用户不存在。\n");
         return -1;
     }
 
-    manage_pos = manage_find_user_pos_by_name(manage_list, manage_num, username);
-    if (manage_pos < 0) {
-        printf("用户不存在。\n");
-        return -2;
+    if (list[pos].role > 0) {
+        list[pos].role--;
     }
 
-    if (manage_list[manage_pos].role <= 0) {
-        printf("该用户已经是最低等级。\n");
-        return -3;
-    }
-
-    manage_list[manage_pos].role--;//把角色往下降一级
-    if (crud_save_users(manage_list, manage_num) == 0) {
-        printf("降级成功：%s 当前角色：%s\n", username, manage_role_name(manage_list[manage_pos].role));
-        return 0;
-    }
-
-    printf("降级失败。\n");
-    return -4;
+    crud_save_users(list, num);
+    printf("降级完成。\n");
+    return 0;
 }
 
+//管理员删除用户
+//这里是把数组后面的内容往前移一位
 int manage_user_delete(void)
 {
+    users list[MAX_USERS];
+    int num;
+    int pos;
     char username[50];
-    users manage_list[MAX_USERS];
-    int manage_num;
-    int manage_pos;
-    int manage_target_id;
     int i;
 
+    num = crud_load_users(list);
     printf("请输入要删除的用户名：");
     scanf("%49s", username);
-
-    manage_num = crud_load_users(manage_list, MAX_USERS);
-    if (manage_num <= 0) {
-        printf("用户数据为空。\n");
-        return -1;
-    }
-
-    manage_pos = manage_find_user_pos_by_name(manage_list, manage_num, username);
-    if (manage_pos < 0) {
+    pos = crud_find_user_index(list, num, username);
+    if (pos < 0) {
         printf("用户不存在。\n");
-        return -2;
-    }
-
-    manage_target_id = manage_list[manage_pos].id;
-
-    for (i = manage_pos; i < manage_num - 1; i++) {//先把这个用户从数组里删掉
-        manage_list[i] = manage_list[i + 1];
-    }
-    manage_num--;
-
-    for (i = 0; i < manage_num; i++) {//再把其他人的好友列表里对应的id也删掉
-        int j;
-        for (j = 0; j < manage_list[i].friend_count; j++) {
-            if (manage_list[i].friends[j] == manage_target_id) {
-                int k;
-                for (k = j; k < manage_list[i].friend_count - 1; k++) {
-                    manage_list[i].friends[k] = manage_list[i].friends[k + 1];
-                }
-                manage_list[i].friend_count--;
-                j--;
-            }
-        }
-    }
-
-    if (crud_save_users(manage_list, manage_num) == 0) {
-        printf("用户 %s 删除成功。\n", username);
-        return 0;
-    }
-
-    printf("删除失败。\n");
-    return -3;
-}
-
-void manage_user_show_info(char* username)
-{
-    users* u;
-
-    if (username == NULL) {
-        return;
-    }
-
-    u = crud_find_user(username);
-    if (u == NULL) {
-        printf("用户不存在。\n");
-        return;
-    }
-
-    printf("\n个人信息：\n");
-    printf("用户名：%s\n", u->username);
-    printf("年龄：%d\n", u->age);
-    printf("角色：%s\n", manage_role_name(u->role));
-    printf("金币：%d\n", u->coins);
-    printf("好友数：%d\n", u->friend_count);
-    printf("资产数：%d\n", u->asset_count);
-}
-
-int manage_user_edit_info(char* username)
-{
-    users manage_list[MAX_USERS];
-    int manage_num;
-    int manage_pos;
-    int manage_choice;
-
-    if (username == NULL) {
         return -1;
     }
 
-    manage_num = crud_load_users(manage_list, MAX_USERS);
-    if (manage_num <= 0) {
-        printf("用户数据为空。\n");
-        return -2;
+    for (i = pos; i < num - 1; i++) {
+        list[i] = list[i + 1];
     }
-
-    manage_pos = manage_find_user_pos_by_name(manage_list, manage_num, username);
-    if (manage_pos < 0) {
-        printf("当前用户不存在。\n");
-        return -3;
-    }
-
-    printf("\n个人信息修改\n");
-    printf("1. 修改密码\n");
-    printf("2. 修改年龄\n");
-    printf("3. 充值金币\n");
-    printf("0. 返回\n");
-    printf("请输入选择：");
-    scanf("%d", &manage_choice);
-
-    if (manage_choice == 1) {
-        char manage_passwd[50];
-        printf("请输入新密码：");
-        scanf("%49s", manage_passwd);
-        strncpy(manage_list[manage_pos].passwd, manage_passwd, sizeof(manage_list[manage_pos].passwd) - 1);
-        manage_list[manage_pos].passwd[sizeof(manage_list[manage_pos].passwd) - 1] = '\0';
-    } else if (manage_choice == 2) {
-        int manage_age;
-        printf("请输入新年龄：");
-        scanf("%d", &manage_age);
-        if (manage_age <= 0) {
-            printf("年龄不合法。\n");
-            return -4;
-        }
-        manage_list[manage_pos].age = manage_age;
-    } else if (manage_choice == 3) {
-        int manage_add_coins;
-        printf("请输入充值金币数量：");
-        scanf("%d", &manage_add_coins);
-        if (manage_add_coins <= 0) {
-            printf("充值数量不合法。\n");
-            return -5;
-        }
-        manage_list[manage_pos].coins += manage_add_coins;
-    } else if (manage_choice == 0) {
-        return 0;
-    } else {
-        printf("无效选择。\n");
-        return -6;
-    }
-
-    if (crud_save_users(manage_list, manage_num) == 0) {
-        printf("信息修改成功。\n");
-        return 0;
-    }
-
-    printf("信息修改失败。\n");
-    return -7;
+    num--;
+    crud_save_users(list, num);
+    printf("删除完成。\n");
+    return 0;
 }
 
-int manage_friend_add(char* username)
+//添加好友
+//双方都会互相进入对方的好友列表
+int manage_friend_add(char username[])
 {
-    char manage_friend_name[50];
-    users manage_list[MAX_USERS];
-    int manage_num;
-    int manage_my_pos;
-    int manage_friend_pos;
+    users list[MAX_USERS];
+    int num;
+    int my_pos;
+    int friend_pos;
+    char friend_name[50];
 
-    if (username == NULL) {
+    num = crud_load_users(list);
+    my_pos = crud_find_user_index(list, num, username);
+    if (my_pos < 0) {
         return -1;
     }
 
-    printf("请输入要添加的好友用户名：");
-    scanf("%49s", manage_friend_name);
-
-    if (strcmp(username, manage_friend_name) == 0) {
-        printf("不能添加自己为好友。\n");
-        return -2;
-    }
-
-    manage_num = crud_load_users(manage_list, MAX_USERS);
-    if (manage_num <= 0) {
-        printf("用户数据为空。\n");
-        return -3;
-    }
-
-    manage_my_pos = manage_find_user_pos_by_name(manage_list, manage_num, username);
-    manage_friend_pos = manage_find_user_pos_by_name(manage_list, manage_num, manage_friend_name);
-
-    if (manage_my_pos < 0 || manage_friend_pos < 0) {
+    printf("请输入好友用户名：");
+    scanf("%49s", friend_name);
+    friend_pos = crud_find_user_index(list, num, friend_name);
+    if (friend_pos < 0) {
         printf("好友不存在。\n");
-        return -4;
+        return -1;
     }
 
-    if (manage_is_friend(&manage_list[manage_my_pos], manage_list[manage_friend_pos].id)) {
-        printf("你们已经是好友了。\n");
-        return -5;
+    if (my_pos == friend_pos) {
+        printf("不能加自己。\n");
+        return -1;
     }
 
-    if (manage_list[manage_my_pos].friend_count >= MAX_FRIENDS || manage_list[manage_friend_pos].friend_count >= MAX_FRIENDS) {
-        printf("好友数量已达上限。\n");
-        return -6;
+    if (list[my_pos].friend_count >= MAX_FRIENDS || list[friend_pos].friend_count >= MAX_FRIENDS) {
+        printf("好友已满。\n");
+        return -1;
     }
 
-    manage_list[manage_my_pos].friends[manage_list[manage_my_pos].friend_count++] = manage_list[manage_friend_pos].id;//双方互相加到好友列表里
-    manage_list[manage_friend_pos].friends[manage_list[manage_friend_pos].friend_count++] = manage_list[manage_my_pos].id;
-
-    if (crud_save_users(manage_list, manage_num) == 0) {
-        printf("添加好友成功：%s\n", manage_friend_name);
-        return 0;
-    }
-
-    printf("添加好友失败。\n");
-    return -7;
+    list[my_pos].friends[list[my_pos].friend_count] = list[friend_pos].id;
+    list[my_pos].friend_count++;
+    list[friend_pos].friends[list[friend_pos].friend_count] = list[my_pos].id;
+    list[friend_pos].friend_count++;
+    crud_save_users(list, num);
+    printf("添加好友成功。\n");
+    return 0;
 }
 
-int manage_friend_remove(char* username)
+//删除好友
+//这里也是双向删除，不是只删一边
+int manage_friend_remove(char username[])
 {
-    char manage_friend_name[50];
-    users manage_list[MAX_USERS];
-    int manage_num;
-    int manage_my_pos;
-    int manage_friend_pos;
+    users list[MAX_USERS];
+    int num;
+    int my_pos;
+    int friend_pos;
+    char friend_name[50];
     int i;
+    int j;
 
-    if (username == NULL) {
+    num = crud_load_users(list);
+    my_pos = crud_find_user_index(list, num, username);
+    if (my_pos < 0) {
         return -1;
     }
 
     printf("请输入要删除的好友用户名：");
-    scanf("%49s", manage_friend_name);
-
-    manage_num = crud_load_users(manage_list, MAX_USERS);
-    if (manage_num <= 0) {
-        printf("用户数据为空。\n");
-        return -2;
-    }
-
-    manage_my_pos = manage_find_user_pos_by_name(manage_list, manage_num, username);
-    manage_friend_pos = manage_find_user_pos_by_name(manage_list, manage_num, manage_friend_name);
-
-    if (manage_my_pos < 0 || manage_friend_pos < 0) {
+    scanf("%49s", friend_name);
+    friend_pos = crud_find_user_index(list, num, friend_name);
+    if (friend_pos < 0) {
         printf("好友不存在。\n");
-        return -3;
+        return -1;
     }
 
-    if (!manage_is_friend(&manage_list[manage_my_pos], manage_list[manage_friend_pos].id)) {
-        printf("你们当前不是好友关系。\n");
-        return -4;
-    }
-
-    for (i = 0; i < manage_list[manage_my_pos].friend_count; i++) {//先从自己这边删
-        if (manage_list[manage_my_pos].friends[i] == manage_list[manage_friend_pos].id) {
-            int j;
-            for (j = i; j < manage_list[manage_my_pos].friend_count - 1; j++) {
-                manage_list[manage_my_pos].friends[j] = manage_list[manage_my_pos].friends[j + 1];
+    for (i = 0; i < list[my_pos].friend_count; i++) {
+        if (list[my_pos].friends[i] == list[friend_pos].id) {
+            for (j = i; j < list[my_pos].friend_count - 1; j++) {
+                list[my_pos].friends[j] = list[my_pos].friends[j + 1];
             }
-            manage_list[manage_my_pos].friend_count--;
+            list[my_pos].friend_count--;
             break;
         }
     }
 
-    for (i = 0; i < manage_list[manage_friend_pos].friend_count; i++) {//再从对方那边删
-        if (manage_list[manage_friend_pos].friends[i] == manage_list[manage_my_pos].id) {
-            int j;
-            for (j = i; j < manage_list[manage_friend_pos].friend_count - 1; j++) {
-                manage_list[manage_friend_pos].friends[j] = manage_list[manage_friend_pos].friends[j + 1];
+    for (i = 0; i < list[friend_pos].friend_count; i++) {
+        if (list[friend_pos].friends[i] == list[my_pos].id) {
+            for (j = i; j < list[friend_pos].friend_count - 1; j++) {
+                list[friend_pos].friends[j] = list[friend_pos].friends[j + 1];
             }
-            manage_list[manage_friend_pos].friend_count--;
+            list[friend_pos].friend_count--;
             break;
         }
     }
 
-    if (crud_save_users(manage_list, manage_num) == 0) {
-        printf("删除好友成功：%s\n", manage_friend_name);
-        return 0;
-    }
-
-    printf("删除好友失败。\n");
-    return -5;
+    crud_save_users(list, num);
+    printf("删除好友成功。\n");
+    return 0;
 }
 
-void manage_friend_list(char* username)
+//显示当前用户的好友列表
+//这里会把好友ID再对应回好友名字
+void manage_friend_list(char username[])
 {
-    users manage_list[MAX_USERS];
-    int manage_num;
-    int manage_my_pos;
+    users list[MAX_USERS];
+    int num;
+    int my_pos;
     int i;
+    int pos;
 
-    if (username == NULL) {
+    num = crud_load_users(list);
+    my_pos = crud_find_user_index(list, num, username);
+    if (my_pos < 0) {
         return;
     }
 
-    manage_num = crud_load_users(manage_list, MAX_USERS);
-    if (manage_num <= 0) {
-        printf("用户数据为空。\n");
+    if (list[my_pos].friend_count == 0) {
+        printf("还没有好友。\n");
         return;
     }
 
-    manage_my_pos = manage_find_user_pos_by_name(manage_list, manage_num, username);
-    if (manage_my_pos < 0) {
-        printf("当前用户不存在。\n");
-        return;
-    }
-
-    if (manage_list[manage_my_pos].friend_count == 0) {
-        printf("你还没有好友。\n");
-        return;
-    }
-
-    printf("\n我的好友：\n");
-    for (i = 0; i < manage_list[manage_my_pos].friend_count; i++) {
-        int manage_pos = manage_find_user_pos_by_id(manage_list, manage_num, manage_list[manage_my_pos].friends[i]);
-        if (manage_pos >= 0) {
-            printf("- %s\n", manage_list[manage_pos].username);
+    printf("\n好友列表\n");
+    for (i = 0; i < list[my_pos].friend_count; i++) {
+        pos = crud_find_user_id_index(list, num, list[my_pos].friends[i]);
+        if (pos >= 0) {
+            printf("%s\n", list[pos].username);
         }
     }
 }
 
-void manage_show_recommend_games(char* manage_username)
+//好友邀约功能
+//只有已经加成好友的人才能发邀约
+int manage_friend_invite(char username[])
 {
-    games manage_game_list[MAX_GAMES];
-    users* manage_now_user;
-    int manage_num;
+    users list[MAX_USERS];
+    games game_list[MAX_GAMES];
+    invite_log invite = {0};
+    int num;
+    int game_num;
+    int my_pos;
+    int friend_pos;
+    int has_friend = 0;
     int i;
-    int manage_shown = 0;
+    char friend_name[50];
+    char game_name[50];
 
-    if (manage_username == NULL) {
-        return;
+    num = crud_load_users(list);
+    my_pos = crud_find_user_index(list, num, username);
+    if (my_pos < 0) {
+        return -1;
     }
 
-    manage_now_user = crud_find_user(manage_username);
-    if (manage_now_user == NULL) {
-        printf("用户不存在。\n");
-        return;
+    printf("请输入要邀约的好友用户名：");
+    scanf("%49s", friend_name);
+    friend_pos = crud_find_user_index(list, num, friend_name);
+    if (friend_pos < 0) {
+        printf("好友不存在。\n");
+        return -1;
     }
 
-    manage_num = crud_load_games(manage_game_list, MAX_GAMES);
-    if (manage_num <= 0) {
-        printf("当前没有可推荐的游戏数据。\n");
-        return;
-    }
-
-    printf("\n推荐游戏（按年龄做简单推荐）：\n");//这里只做一个很简单的推荐
-    for (i = 0; i < manage_num; i++) {
-        int manage_matched = 0;
-        if (manage_now_user->age < 18 && (manage_game_list[i].game_id % 2 == 0)) {
-            manage_matched = 1;
-        }
-        if (manage_now_user->age >= 18 && (manage_game_list[i].game_id % 2 == 1)) {
-            manage_matched = 1;
-        }
-
-        if (manage_matched) {
-            printf("- %s：%s\n", manage_game_list[i].game_name, manage_game_list[i].game_desc);
-            manage_shown++;
+    for (i = 0; i < list[my_pos].friend_count; i++) {
+        if (list[my_pos].friends[i] == list[friend_pos].id) {
+            has_friend = 1;
+            break;
         }
     }
 
-    if (manage_shown == 0) {
-        for (i = 0; i < manage_num && i < 3; i++) {
-            printf("- %s：%s\n", manage_game_list[i].game_name, manage_game_list[i].game_desc);
+    if (has_friend == 0) {
+        printf("对方不是你的好友，不能发邀约。\n");
+        return -1;
+    }
+
+    game_num = crud_load_games(game_list);
+    printf("\n可邀约游戏\n");
+    for (i = 0; i < game_num; i++) {
+        printf("%s  %s\n", game_list[i].game_name, game_list[i].game_type);
+    }
+
+    printf("请输入邀约游戏名称：");
+    scanf("%49s", game_name);
+
+    invite.send_id = list[my_pos].id;
+    invite.recv_id = list[friend_pos].id;
+    strcpy(invite.send_name, list[my_pos].username);
+    strcpy(invite.recv_name, list[friend_pos].username);
+    strcpy(invite.game_name, game_name);
+    crud_add_invite_log(&invite);
+    printf("邀约发送成功。\n");
+    return 0;
+}
+
+//查看和自己有关的邀约记录
+//不管是你发出去的还是别人发给你的都会显示
+void manage_friend_show_invite(char username[])
+{
+    invite_log logs[MAX_MARKET];
+    int num;
+    int i;
+    int show_count = 0;
+
+    num = crud_load_invite_logs(logs);
+    if (num <= 0) {
+        printf("还没有邀约记录。\n");
+        return;
+    }
+
+    printf("\n好友邀约记录\n");
+    for (i = 0; i < num; i++) {
+        if (strcmp(logs[i].send_name, username) == 0 || strcmp(logs[i].recv_name, username) == 0) {
+            printf("发起人：%s  接收人：%s  游戏：%s\n",
+                   logs[i].send_name,
+                   logs[i].recv_name,
+                   logs[i].game_name);
+            show_count++;
+        }
+    }
+
+    if (show_count == 0) {
+        printf("你还没有邀约记录。\n");
+    }
+}
+
+//推荐游戏
+//这里按年龄、身份、爱好和游戏时长做一个简单推荐
+void manage_show_recommend_games(char username[])
+{
+    users list[MAX_USERS];
+    games game_list[MAX_GAMES];
+    int user_num;
+    int game_num;
+    int pos;
+    int i;
+    int show_count = 0;
+
+    user_num = crud_load_users(list);
+    pos = crud_find_user_index(list, user_num, username);
+    if (pos < 0) {
+        return;
+    }
+
+    game_num = crud_load_games(game_list);
+    printf("\n推荐游戏\n");
+    for (i = 0; i < game_num; i++) {
+        if (list[pos].age >= game_list[i].need_age) {
+            if (strstr(game_list[i].game_type, list[pos].hobby) != NULL ||
+                strstr(list[pos].hobby, game_list[i].game_type) != NULL ||
+                (strstr(list[pos].identity, "学生") != NULL && strstr(game_list[i].game_type, "竞技") != NULL) ||
+                (strstr(list[pos].identity, "教师") != NULL && strstr(game_list[i].game_type, "策略") != NULL) ||
+                (list[pos].game_hours >= 100 && strstr(game_list[i].game_type, "竞技") != NULL)) {
+                printf("%s  %s  %s\n",
+                       game_list[i].game_name,
+                       game_list[i].game_type,
+                       game_list[i].game_desc);
+                show_count++;
+            }
+        }
+    }
+
+    if (show_count == 0) {
+        for (i = 0; i < game_num; i++) {
+            if (list[pos].age >= game_list[i].need_age) {
+                printf("%s  %s  %s\n",
+                       game_list[i].game_name,
+                       game_list[i].game_type,
+                       game_list[i].game_desc);
+            }
         }
     }
 }
 
-void manage_show_friend_menu(char* manage_username)
+//好友菜单
+//把好友相关功能集中放在这里
+void manage_show_friend_menu(char username[])
 {
-    int manage_choice;
+    int choice;
 
     while (1) {
-        printf("\n好友菜单\n");
-        printf("1. 查看好友\n");
-        printf("2. 添加好友\n");
-        printf("3. 删除好友\n");
-        printf("0. 返回\n");
+        printf("\n1.查看好友\n");
+        printf("2.添加好友\n");
+        printf("3.删除好友\n");
+        printf("4.发起邀约\n");
+        printf("5.查看邀约记录\n");
+        printf("0.返回\n");
         printf("请输入选择：");
-        scanf("%d", &manage_choice);
+        scanf("%d", &choice);
 
-        if (manage_choice == 1) {
-            manage_friend_list(manage_username);
-        } else if (manage_choice == 2) {
-            manage_friend_add(manage_username);
-        } else if (manage_choice == 3) {
-            manage_friend_remove(manage_username);
-        } else if (manage_choice == 0) {
-            return;
+        if (choice == 1) {
+            manage_friend_list(username);
+        } else if (choice == 2) {
+            manage_friend_add(username);
+        } else if (choice == 3) {
+            manage_friend_remove(username);
+        } else if (choice == 4) {
+            manage_friend_invite(username);
+        } else if (choice == 5) {
+            manage_friend_show_invite(username);
         } else {
-            printf("无效选择，请重新输入！\n");
+            return;
         }
     }
 }
 
-void manage_show_user_info_menu(char* manage_username)
+//个人信息菜单
+//查看和修改个人资料都从这里进入
+void manage_show_user_info_menu(char username[])
 {
-    int manage_choice;
+    int choice;
 
     while (1) {
-        printf("\n个人信息菜单\n");
-        printf("1. 查看个人信息\n");
-        printf("2. 修改个人信息\n");
-        printf("0. 返回\n");
+        printf("\n1.查看个人信息\n");
+        printf("2.修改个人信息\n");
+        printf("0.返回\n");
         printf("请输入选择：");
-        scanf("%d", &manage_choice);
+        scanf("%d", &choice);
 
-        if (manage_choice == 1) {
-            manage_user_show_info(manage_username);
-        } else if (manage_choice == 2) {
-            manage_user_edit_info(manage_username);
-        } else if (manage_choice == 0) {
-            return;
+        if (choice == 1) {
+            manage_user_show_info(username);
+        } else if (choice == 2) {
+            manage_user_edit_info(username);
         } else {
-            printf("无效选择，请重新输入！\n");
+            return;
         }
     }
 }
 
+//管理员菜单
+//管理员可以在这里管用户
 void manage_show_admin_menu(void)
 {
-    int manage_choice;
+    int choice;
 
     while (1) {
-        printf("\n管理员菜单\n");
-        printf("1. 查看所有用户\n");
-        printf("2. 升级用户\n");
-        printf("3. 降级用户\n");
-        printf("4. 删除用户\n");
-        printf("0. 返回\n");
+        printf("\n1.查看所有用户\n");
+        printf("2.升级用户\n");
+        printf("3.降级用户\n");
+        printf("4.删除用户\n");
+        printf("0.返回\n");
         printf("请输入选择：");
-        scanf("%d", &manage_choice);
+        scanf("%d", &choice);
 
-        if (manage_choice == 1) {
+        if (choice == 1) {
             manage_user_list_all();
-        } else if (manage_choice == 2) {
+        } else if (choice == 2) {
             manage_user_upgrade();
-        } else if (manage_choice == 3) {
+        } else if (choice == 3) {
             manage_user_degrade();
-        } else if (manage_choice == 4) {
+        } else if (choice == 4) {
             manage_user_delete();
-        } else if (manage_choice == 0) {
-            return;
         } else {
-            printf("无效选择，请重新输入！\n");
+            return;
         }
     }
 }
 
-//交易功能
-
+//把市场里现在所有在售的道具列出来
+//用户买东西之前会先看这里
 void trade_show_market(void)
 {
-    market trade_items[MAX_MARKET_ITEMS];
-    users trade_user_list[MAX_USERS];
-    int trade_item_count;
-    int trade_user_count;
+    market list[MAX_MARKET];
+    users user_list[MAX_USERS];
+    int num;
+    int user_num;
     int i;
+    int pos;
 
-    trade_item_count = crud_load_market(trade_items, MAX_MARKET_ITEMS);
-    trade_user_count = crud_load_users(trade_user_list, MAX_USERS);
-
-    if (trade_item_count <= 0) {
-        printf("市场暂无上架道具。\n");
+    num = crud_load_market(list);
+    user_num = crud_load_users(user_list);
+    if (num <= 0) {
+        printf("市场里还没有道具。\n");
         return;
     }
 
-    printf("\n市场列表：\n");
-    printf("道具ID\t名称\t价格\t卖家\t上架时间\n");
-    for (i = 0; i < trade_item_count; i++) {//把市场里的内容列出来
-        char* trade_seller_name = "未知卖家";
-        int trade_seller_pos = manage_find_user_pos_by_id(trade_user_list, trade_user_count, trade_items[i].seller_id);
-        if (trade_seller_pos >= 0) {
-            trade_seller_name = trade_user_list[trade_seller_pos].username;
+    printf("\n市场列表\n");
+    printf("ID\t名称\t类型\t价格\t卖家\n");
+    for (i = 0; i < num; i++) {
+        pos = crud_find_user_id_index(user_list, user_num, list[i].seller_id);
+        printf("%d\t%s\t%s\t%d\t",
+               list[i].item_id,
+               list[i].item_name,
+               list[i].item_type,
+               list[i].item_price);
+        if (pos >= 0) {
+            printf("%s\n", user_list[pos].username);
+        } else {
+            printf("未知\n");
         }
-        printf("%d\t%s\t%d\t%s\t%s\n",
-               trade_items[i].item_id,
-               trade_items[i].item_name,
-               trade_items[i].item_price,
-               trade_seller_name,
-               trade_items[i].publish_time);
     }
 }
 
-int trade_publish_item(char* trade_username)
+//显示交易记录
+//这里只展示和当前用户有关的记录
+void trade_show_log(char username[])
 {
-    users trade_user_list[MAX_USERS];
-    int trade_user_count;
-    int trade_my_pos;
-    market trade_item = {0};
-    char trade_item_name[64];
-    int trade_item_price;
-    time_t trade_now;
-    struct tm* trade_tm_info;
+    trade_log logs[MAX_MARKET];
+    int num;
+    int i;
+    int show_count = 0;
 
-    if (trade_username == NULL) {
+    num = crud_load_trade_logs(logs);
+    if (num <= 0) {
+        printf("还没有交易记录。\n");
+        return;
+    }
+
+    printf("\n交易记录\n");
+    for (i = 0; i < num; i++) {
+        if (strcmp(logs[i].buyer_name, username) == 0 || strcmp(logs[i].seller_name, username) == 0) {
+            printf("道具：%s  类型：%s  价格：%d  买家：%s  卖家：%s\n",
+                   logs[i].item_name,
+                   logs[i].item_type,
+                   logs[i].item_price,
+                   logs[i].buyer_name,
+                   logs[i].seller_name);
+            show_count++;
+        }
+    }
+
+    if (show_count == 0) {
+        printf("你还没有相关交易记录。\n");
+    }
+}
+
+//上架道具
+//输入道具名字、类型和价格以后保存到市场里
+int trade_publish_item(char username[])
+{
+    market list[MAX_MARKET];
+    users user_list[MAX_USERS];
+    int num;
+    int user_num;
+    int user_pos;
+    market item = {0};
+
+    num = crud_load_market(list);
+    user_num = crud_load_users(user_list);
+    user_pos = crud_find_user_index(user_list, user_num, username);
+    if (user_pos < 0) {
         return -1;
     }
 
-    trade_user_count = crud_load_users(trade_user_list, MAX_USERS);
-    if (trade_user_count <= 0) {
-        printf("用户数据为空。\n");
-        return -2;
+    printf("请输入道具名称：");
+    scanf("%49s", item.item_name);
+    printf("请输入道具类型：");
+    scanf("%29s", item.item_type);
+    printf("请输入价格：");
+    scanf("%d", &item.item_price);
+
+    item.item_id = crud_next_id();
+    item.seller_id = user_list[user_pos].id;
+    list[num] = item;
+    num++;
+
+    if (user_list[user_pos].asset_count < MAX_ASSETS) {
+        user_list[user_pos].assets[user_list[user_pos].asset_count] = item.item_id;
+        user_list[user_pos].asset_count++;
     }
 
-    trade_my_pos = manage_find_user_pos_by_name(trade_user_list, trade_user_count, trade_username);
-    if (trade_my_pos < 0) {
-        printf("当前用户不存在。\n");
-        return -3;
-    }
-
-    printf("请输入道具名称（不含空格）：");//输入要上架的道具信息
-    scanf("%63s", trade_item_name);
-    printf("请输入道具价格：");
-    scanf("%d", &trade_item_price);
-
-    if (trade_item_price <= 0) {
-        printf("价格必须大于0。\n");
-        return -4;
-    }
-
-    trade_item.item_id = crud_next_id();//给道具补上编号和卖家
-    strncpy(trade_item.item_name, trade_item_name, sizeof(trade_item.item_name) - 1);
-    trade_item.item_price = trade_item_price;
-    trade_item.seller_id = trade_user_list[trade_my_pos].id;
-
-    trade_now = time(NULL);
-    trade_tm_info = localtime(&trade_now);
-    if (trade_tm_info != NULL) {
-        strftime(trade_item.publish_time, sizeof(trade_item.publish_time), "%Y-%m-%d", trade_tm_info);
-    } else {
-        strcpy(trade_item.publish_time, "unknown");
-    }
-
-    if (crud_add_market_item(&trade_item) != 0) {
-        printf("上架失败。\n");
-        return -5;
-    }
-
-    if (trade_user_list[trade_my_pos].asset_count < MAX_ASSETS) {
-        trade_user_list[trade_my_pos].assets[trade_user_list[trade_my_pos].asset_count++] = trade_item.item_id;
-        crud_save_users(trade_user_list, trade_user_count);
-    }
-
-    printf("上架成功！道具ID：%d\n", trade_item.item_id);
+    crud_save_market(list, num);
+    crud_save_users(user_list, user_num);
+    printf("上架成功。\n");
     return 0;
 }
 
-int trade_buy_item(char* trade_username)
+//购买道具
+//买家扣钱，卖家加钱，同时还会写交易记录
+int trade_buy_item(char username[])
 {
-    market trade_items[MAX_MARKET_ITEMS];
-    users trade_user_list[MAX_USERS];
-    int trade_item_count;
-    int trade_user_count;
-    int trade_buyer_pos;
-    int trade_target_id;
-    int trade_item_pos = -1;
-    int trade_seller_pos;
-    int trade_bought_price;
+    market list[MAX_MARKET];
+    users user_list[MAX_USERS];
+    trade_log one_log = {0};
+    int num;
+    int user_num;
+    int buyer_pos;
+    int item_pos;
+    int seller_pos;
+    int target_id;
     int i;
 
-    if (trade_username == NULL) {
+    num = crud_load_market(list);
+    user_num = crud_load_users(user_list);
+    buyer_pos = crud_find_user_index(user_list, user_num, username);
+    if (buyer_pos < 0) {
         return -1;
     }
 
-    trade_item_count = crud_load_market(trade_items, MAX_MARKET_ITEMS);
-    if (trade_item_count <= 0) {
-        printf("市场暂无上架道具。\n");
-        return -2;
+    if (num <= 0) {
+        printf("市场里还没有道具。\n");
+        return -1;
     }
 
-    trade_user_count = crud_load_users(trade_user_list, MAX_USERS);
-    if (trade_user_count <= 0) {
-        printf("用户数据为空。\n");
-        return -3;
-    }
-
-    trade_buyer_pos = manage_find_user_pos_by_name(trade_user_list, trade_user_count, trade_username);
-    if (trade_buyer_pos < 0) {
-        printf("当前用户不存在。\n");
-        return -4;
-    }
-
-    trade_show_market();//先显示市场再让用户输入
+    trade_show_market();
     printf("请输入要购买的道具ID：");
-    scanf("%d", &trade_target_id);
-
-    for (i = 0; i < trade_item_count; i++) {//找到要买的是哪一个
-        if (trade_items[i].item_id == trade_target_id) {
-            trade_item_pos = i;
-            break;
-        }
+    scanf("%d", &target_id);
+    item_pos = crud_find_market_index(list, num, target_id);
+    if (item_pos < 0) {
+        printf("没有这个道具。\n");
+        return -1;
     }
 
-    if (trade_item_pos < 0) {
-        printf("未找到该道具。\n");
-        return -5;
+    if (list[item_pos].seller_id == user_list[buyer_pos].id) {
+        printf("不能买自己的道具。\n");
+        return -1;
     }
 
-    if (trade_items[trade_item_pos].seller_id == trade_user_list[trade_buyer_pos].id) {
-        printf("不能购买自己上架的道具。\n");
-        return -6;
+    if (user_list[buyer_pos].coins < list[item_pos].item_price) {
+        printf("金币不够。\n");
+        return -1;
     }
 
-    if (trade_user_list[trade_buyer_pos].coins < trade_items[trade_item_pos].item_price) {
-        printf("金币不足，购买失败。\n");
-        return -7;
+    seller_pos = crud_find_user_id_index(user_list, user_num, list[item_pos].seller_id);
+    user_list[buyer_pos].coins -= list[item_pos].item_price;
+    if (seller_pos >= 0) {
+        user_list[seller_pos].coins += list[item_pos].item_price;
     }
 
-    trade_seller_pos = manage_find_user_pos_by_id(trade_user_list, trade_user_count, trade_items[trade_item_pos].seller_id);
-    trade_bought_price = trade_items[trade_item_pos].item_price;
-
-    trade_user_list[trade_buyer_pos].coins -= trade_bought_price;//买家扣钱，卖家加钱
-    if (trade_seller_pos >= 0) {
-        trade_user_list[trade_seller_pos].coins += trade_bought_price;
+    if (user_list[buyer_pos].asset_count < MAX_ASSETS) {
+        user_list[buyer_pos].assets[user_list[buyer_pos].asset_count] = list[item_pos].item_id;
+        user_list[buyer_pos].asset_count++;
     }
 
-    if (trade_user_list[trade_buyer_pos].asset_count < MAX_ASSETS) {
-        trade_user_list[trade_buyer_pos].assets[trade_user_list[trade_buyer_pos].asset_count++] = trade_items[trade_item_pos].item_id;
+    one_log.buyer_id = user_list[buyer_pos].id;
+    strcpy(one_log.buyer_name, user_list[buyer_pos].username);
+    one_log.seller_id = list[item_pos].seller_id;
+    if (seller_pos >= 0) {
+        strcpy(one_log.seller_name, user_list[seller_pos].username);
+    } else {
+        strcpy(one_log.seller_name, "未知");
     }
+    one_log.item_id = list[item_pos].item_id;
+    strcpy(one_log.item_name, list[item_pos].item_name);
+    strcpy(one_log.item_type, list[item_pos].item_type);
+    one_log.item_price = list[item_pos].item_price;
 
-    for (i = trade_item_pos; i < trade_item_count - 1; i++) {//买走后从市场里删掉
-        trade_items[i] = trade_items[i + 1];
+    for (i = item_pos; i < num - 1; i++) {
+        list[i] = list[i + 1];
     }
-    trade_item_count--;
+    num--;
 
-    if (crud_save_users(trade_user_list, trade_user_count) != 0) {
-        printf("用户数据保存失败。\n");
-        return -8;
-    }
-
-    if (crud_save_market(trade_items, trade_item_count) != 0) {
-        printf("市场数据保存失败。\n");
-        return -9;
-    }
-
-    printf("购买成功！你花费了 %d 金币。\n", trade_bought_price);
+    crud_save_market(list, num);
+    crud_save_users(user_list, user_num);
+    crud_add_trade_log(&one_log);
+    printf("购买成功。\n");
     return 0;
 }
 
-void trade_menu(char* trade_username)
+//交易菜单
+//市场查看、上架、购买、交易记录都在这里
+void trade_menu(char username[])
 {
-    int trade_choice;
+    int choice;
 
     while (1) {
-        printf("\n交易菜单\n");
-        printf("1. 查看市场\n");
-        printf("2. 发布道具\n");
-        printf("3. 购买道具\n");
-        printf("0. 返回上级菜单\n");
+        printf("\n1.查看市场\n");
+        printf("2.上架道具\n");
+        printf("3.购买道具\n");
+        printf("4.查看交易记录\n");
+        printf("0.返回\n");
         printf("请输入选择：");
-        scanf("%d", &trade_choice);
+        scanf("%d", &choice);
 
-        if (trade_choice == 1) {
+        if (choice == 1) {
             trade_show_market();
-        } else if (trade_choice == 2) {
-            trade_publish_item(trade_username);
-        } else if (trade_choice == 3) {
-            trade_buy_item(trade_username);
-        } else if (trade_choice == 0) {
-            return;
+        } else if (choice == 2) {
+            trade_publish_item(username);
+        } else if (choice == 3) {
+            trade_buy_item(username);
+        } else if (choice == 4) {
+            trade_show_log(username);
         } else {
-            printf("无效选择，请重新输入。\n");
+            return;
         }
     }
 }
 
-//菜单和主程序
-int main_show_menu(int main_role)
+//主菜单显示函数
+//根据是不是管理员，菜单内容会有一点区别
+int main_show_menu(int role)
 {
-    char* main_title = "普通用户菜单";
+    int choice;
 
-    if (main_role == 1) {//不同身份显示不同菜单标题
-        main_title = "VIP用户菜单";
-    } else if (main_role == 2) {
-        main_title = "管理员菜单";
+    printf("\n==============================\n");
+    if (role == 2) {
+        printf("管理员菜单\n");
+        printf("1.排行榜\n");
+        printf("2.推荐游戏\n");
+        printf("3.交易市场\n");
+        printf("4.好友管理\n");
+        printf("5.个人信息\n");
+        printf("6.用户管理\n");
+        printf("7.退出\n");
+    } else {
+        printf("用户菜单\n");
+        printf("1.排行榜\n");
+        printf("2.推荐游戏\n");
+        printf("3.交易市场\n");
+        printf("4.好友管理\n");
+        printf("5.个人信息\n");
+        printf("6.退出\n");
     }
-
-    printf("\n+--------------------------------------+\n");
-    printf("|            %s              |\n", main_title);
-    printf("+--------------------------------------+\n");
-
-    if (main_role == 0) {
-        printf("| 1. 游戏排行        2. 推荐游戏      |\n");
-        printf("| 3. 交易道具        4. 我的好友      |\n");
-        printf("| 5. 个人信息        6. 退出系统      |\n");
-    }
-    else if (main_role == 1) {
-        printf("| 1. 游戏排行        2. 推荐游戏      |\n");
-        printf("| 3. 交易道具        4. 我的好友      |\n");
-        printf("| 5. 个人信息        6. 退出系统      |\n");
-    }
-    else if (main_role == 2) {
-        printf("| 1. 游戏排行        2. 推荐游戏      |\n");
-        printf("| 3. 交易道具        4. 我的好友      |\n");
-        printf("| 5. 个人信息        6. 用户管理      |\n");
-        printf("| 7. 退出系统                        |\n");
-    }
-    printf("+--------------------------------------+\n");
-    printf("请输入您的选择：");
-
-    int main_choice;
-    scanf("%d", &main_choice);
-    return main_choice;
+    printf("==============================\n");
+    printf("请输入选择：");
+    scanf("%d", &choice);
+    return choice;
 }
 
-int main_first_register(char main_username[50])
+//金币排行榜
+//这里用最基础的冒泡排序来排前面的用户
+void main_show_ranking(void)
 {
-    int main_age;
-    char main_passwd[50];
-
-    printf("请输入您的年龄：");//第一次登录就当作注册
-    scanf("%d", &main_age);
-
-    while (main_age <= 0) {
-        printf("年龄有误，请重新输入：");
-        scanf("%d", &main_age);
-    }
-
-    printf("请输入您的密码：");
-    scanf("%49s", main_passwd);
-
-    crud_init();
-    manage_user_register(main_username, main_passwd, main_age);
-
-    printf("这是一个基于C语言的游戏推荐和交易系统。\n");
-    printf("请按照提示进行操作，享受您的unisystem之旅！\n");
-
-    return 0;
-}
-
-void main_show_ranking()
-{
-    users main_list[MAX_USERS];
-    int main_num;
+    users list[MAX_USERS];
+    int num;
     int i;
+    int j;
+    users temp;
 
-    main_num = crud_load_users(main_list, MAX_USERS);
-    if (main_num <= 0) {
-        printf("暂无用户数据，无法显示排行。\n");
+    num = crud_load_users(list);
+    if (num <= 0) {
+        printf("没有用户数据。\n");
         return;
     }
 
-    for (i = 0; i < main_num - 1; i++) {//用简单冒泡排序按金币排
-        int j;
-        for (j = 0; j < main_num - 1 - i; j++) {
-            if (main_list[j].coins < main_list[j + 1].coins) {
-                users temp = main_list[j];
-                main_list[j] = main_list[j + 1];
-                main_list[j + 1] = temp;
+    for (i = 0; i < num - 1; i++) {
+        for (j = 0; j < num - 1 - i; j++) {
+            if (list[j].coins < list[j + 1].coins) {
+                temp = list[j];
+                list[j] = list[j + 1];
+                list[j + 1] = temp;
             }
         }
     }
 
-    printf("\n金币排行榜：\n");
-    printf("名次\t用户名\t金币\n");
-    for (i = 0; i < main_num && i < 10; i++) {
-        printf("%d\t%s\t%d\n", i + 1, main_list[i].username, main_list[i].coins);
+    printf("\n金币排行榜\n");
+    for (i = 0; i < num && i < 10; i++) {
+        printf("%d. %s %d\n", i + 1, list[i].username, list[i].coins);
     }
-    return;
 }
 
-int main()
+//如果输入的用户名还不存在
+//那这里就当作第一次注册来处理
+void main_first_register(char username[])
 {
-    char main_username[50];
-    char main_passwd[50];
+    users user = {0};
 
-    crud_init();//程序启动先准备数据文件
-
-    printf("欢迎来到unisystem，请输入您的用户名：");
-    scanf("%49s", main_username);
-
-    if (crud_find_user(main_username) != NULL) {//有账号就登录，没有就注册
-        printf("请输入您的密码：");
-        scanf("%49s", main_passwd);
-        while (manage_user_login(main_username, main_passwd) != 0) {
-            printf("\n请重新输入您的密码：");
-            scanf("%49s", main_passwd);
-        }
-    }
-    else {
-        main_first_register(main_username);
-    }
-
-    while (1)//进入主菜单循环
-    {
-        int main_role = crud_find_user(main_username)->role;
-        switch (main_show_menu(main_role))
-        {
-        case 1:
-            main_show_ranking();
-            break;
-        case 2:
-            manage_show_recommend_games(main_username);
-            break;
-        case 3:
-            trade_menu(main_username);
-            break;
-        case 4:
-            manage_show_friend_menu(main_username);
-            break;
-        case 5:
-            manage_show_user_info_menu(main_username);
-            break;
-        case 6:
-            if (main_role == 2) {
-                manage_show_admin_menu();
-                break;
-            }
-            printf("感谢使用unisystem，期待您的下次光临！\n");
-            return 0;
-        case 7:
-            printf("感谢使用unisystem，期待您的下次光临！\n");
-            return 0;
-        
-        default:
-            printf("无效的选择，请重新输入！\n");
-            break;
-        }
-    }
-    return 0;
+    strcpy(user.username, username);
+    printf("请输入密码：");
+    scanf("%49s", user.passwd);
+    printf("请输入年龄：");
+    scanf("%d", &user.age);
+    printf("请输入身份或职业：");
+    scanf("%29s", user.identity);
+    printf("请输入爱好：");
+    scanf("%29s", user.hobby);
+    manage_user_register(&user);
 }
 
+//主函数
+//程序从这里开始运行，先登录或注册，再进入主菜单循环
+int main(void)
+{
+    char username[50];
+    char passwd[50];
+    users list[MAX_USERS];
+    int num;
+    int pos;
+    int role;
+    int choice;
+
+    crud_init();
+    manage_create_first_admin();
+
+    printf("欢迎来到unisystem，请输入用户名：");
+    scanf("%49s", username);
+
+    num = crud_load_users(list);
+    pos = crud_find_user_index(list, num, username);
+
+    if (pos >= 0) {
+        printf("请输入密码：");
+        scanf("%49s", passwd);
+        while (manage_user_login(username, passwd) != 0) {
+            printf("请重新输入密码：");
+            scanf("%49s", passwd);
+        }
+    } else {
+        main_first_register(username);
+    }
+
+    while (1) {
+        num = crud_load_users(list);
+        pos = crud_find_user_index(list, num, username);
+        if (pos < 0) {
+            return 0;
+        }
+
+        manage_user_auto_upgrade(&list[pos]);
+        crud_save_users(list, num);
+        role = list[pos].role;
+        choice = main_show_menu(role);
+
+        if (choice == 1) {
+            main_show_ranking();
+        } else if (choice == 2) {
+            manage_show_recommend_games(username);
+        } else if (choice == 3) {
+            trade_menu(username);
+        } else if (choice == 4) {
+            manage_show_friend_menu(username);
+        } else if (choice == 5) {
+            manage_show_user_info_menu(username);
+        } else if (choice == 6 && role == 2) {
+            manage_show_admin_menu();
+        } else if ((choice == 6 && role != 2) || (choice == 7 && role == 2)) {
+            printf("感谢使用。\n");
+            return 0;
+        } else {
+            printf("输入有误。\n");
+        }
+    }
+}
