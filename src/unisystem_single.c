@@ -382,17 +382,6 @@ int crud_read_user_line(char* crud_line, users* out_user)
                      &out_user->coins);
 
     if (crud_matched != 6) {
-        crud_matched = sscanf(crud_line,//兼容以前测试留下来的旧格式
-                         "{\"next_id\": %d, \"username\": \"%49[^\"]\", \"passwd\": \"%49[^\"]\", \"age\": %d, \"role\": %d, \"coins\": %d",
-                         &out_user->id,
-                         out_user->username,
-                         out_user->passwd,
-                         &out_user->age,
-                         &out_user->role,
-                         &out_user->coins);
-    }
-
-    if (crud_matched != 6) {
         return -1;
     }
 
