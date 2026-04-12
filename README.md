@@ -121,5 +121,28 @@
 
 ## 7.编译
 
-请使用
-gcc -Wall -Wextra -g3 src/*.c -I./include -o src/output/main && ./src/output/main
+请在项目根目录下编译运行。
+
+### 多文件版
+
+```bash
+gcc -Wall -Wextra -g3 src/main.c src/crud.c src/manage.c src/trade.c -o unisystem.exe
+./unisystem.exe
+```
+
+### 单文件版
+
+已新增单文件版本 `unisystem_single.c`，适合课程作业提交或展示：
+该文件现在会聚合多文件实现，因此与多文件版功能保持一致。
+程序运行时会在当前运行目录自动生成：
+- `users.jsonl`
+- `market.jsonl`
+- `games.jsonl`
+- `id`
+
+不需要手动创建 `data` 文件夹。
+
+```bash
+gcc -Wall -Wextra -g3 src/unisystem_single.c -o unisystem_single.exe
+./unisystem_single.exe
+```
