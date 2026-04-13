@@ -141,7 +141,6 @@ gcc -Wall -Wextra -g3 src/main.c src/crud.c src/manage.c src/trade.c -o unisyste
 - `trade_log.dat`
 - `invite_log.dat`
 - `id.dat`
-- `seed.dat`
 
 不需要手动创建 `data` 文件夹。
 
