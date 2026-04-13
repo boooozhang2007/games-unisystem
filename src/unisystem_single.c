@@ -194,8 +194,7 @@ void crud_write_default_games(void)
     fclose(fp);
 }
 
-//这个函数专门用来生成新的编号
-//每次注册用户或者上架道具时都会用到
+//生成新的编号
 int crud_next_id(void)
 {
     FILE* fp;
@@ -220,8 +219,7 @@ int crud_next_id(void)
     return id_value; //返回这个新编号
 }
 
-//这个函数负责把所有用户从文件里读到数组里
-//后面查找、修改、登录基本都要先调用它
+//加载用户数据，返回读取到的用户数量
 int crud_load_users(users list[])
 {
     FILE* fp;
@@ -242,8 +240,7 @@ int crud_load_users(users list[])
     return num; //返回读取到的用户数量
 }
 
-//这个函数负责把用户数组重新写回文件
-//当用户信息有变化时就保存一次
+//把用户数组重新写回文件
 void crud_save_users(users list[], int num)
 {
     FILE* fp; //文件指针
@@ -259,7 +256,6 @@ void crud_save_users(users list[], int num)
 }
 
 //读取全部游戏数据
-//推荐游戏和好友邀约时会用到
 int crud_load_games(games list[])
 {
     FILE* fp; //文件指针
@@ -281,7 +277,6 @@ int crud_load_games(games list[])
 }
 
 //读取市场里的全部道具
-//进入交易菜单时会先读这里的数据
 int crud_load_market(market list[])
 {
     FILE* fp; //文件指针
@@ -303,7 +298,6 @@ int crud_load_market(market list[])
 }
 
 //读取交易记录
-//这样用户就可以看到自己买过和卖过什么
 int crud_load_trade_logs(trade_log list[])
 {
     FILE* fp; //文件指针
@@ -325,7 +319,6 @@ int crud_load_trade_logs(trade_log list[])
 }
 
 //读取好友邀约记录
-//查看邀约历史的时候会用到
 int crud_load_invite_logs(invite_log list[])
 {
     FILE* fp; //文件指针
@@ -347,7 +340,6 @@ int crud_load_invite_logs(invite_log list[])
 }
 
 //把市场数组重新保存到文件里
-//上架和购买后都要更新这里
 void crud_save_market(market list[], int num)
 {
     FILE* fp; //文件指针
@@ -362,8 +354,7 @@ void crud_save_market(market list[], int num)
     fclose(fp); //关文件
 }
 
-//这里是追加一条交易记录
-//每次购买成功后就往文件后面加一条
+//追加一条交易记录
 void crud_add_trade_log(trade_log* log_data)
 {
     FILE* fp; //文件指针
@@ -375,8 +366,7 @@ void crud_add_trade_log(trade_log* log_data)
     fclose(fp); //关文件
 }
 
-//这里是追加一条好友邀约记录
-//有人发起邀约时就在这里保存
+//追加一条好友邀约记录
 void crud_add_invite_log(invite_log* log_data)
 {
     FILE* fp; //文件指针
@@ -389,7 +379,6 @@ void crud_add_invite_log(invite_log* log_data)
 }
 
 //按用户名在数组里找用户位置
-//找到就返回下标，找不到就返回-1
 int crud_find_user_index(users list[], int num, char username[])
 {
     int i; //循环变量
@@ -404,7 +393,6 @@ int crud_find_user_index(users list[], int num, char username[])
 }
 
 //按用户编号查找位置
-//显示好友名字和市场卖家时会用到
 int crud_find_user_id_index(users list[], int num, int id)
 {
     int i; //循环变量
@@ -419,7 +407,6 @@ int crud_find_user_id_index(users list[], int num, int id)
 }
 
 //按道具ID查市场里的位置
-//购买道具时要先找到是哪一个道具
 int crud_find_market_index(market list[], int num, int item_id)
 {
     int i; //循环变量
@@ -433,8 +420,7 @@ int crud_find_market_index(market list[], int num, int item_id)
     return -1; //没找到返回-1
 }
 
-//如果系统里还没有任何用户
-//这里会自动建一个默认管理员，方便第一次使用
+//如果系统里还没有任何用户，就创建一个默认管理员
 void manage_create_first_admin(void)
 {
     users list[MAX_USERS]; //声明一个用户数组
@@ -465,7 +451,6 @@ void manage_create_first_admin(void)
 
 
 //根据总对局和胜场算胜率
-//这里直接返回整数百分比，方便显示
 int manage_get_win_rate(users* user)
 {
     if (user->play_count <= 0) return 0; //没打过就是0
@@ -533,7 +518,7 @@ int manage_user_login(char username[], char passwd[])
     return 0; //返回0表示成功
 }
 
-//这里做自动升级
+//自动升级
 //普通用户只要游戏时长够或者胜率够，就会升成VIP
 void manage_user_auto_upgrade(users* user)
 {
@@ -549,7 +534,6 @@ void manage_user_auto_upgrade(users* user)
 }
 
 //显示当前用户的详细信息
-//包括画像、游戏时长、胜率、好友数这些内容
 void manage_user_show_info(char username[])
 {
     users list[MAX_USERS]; //用户数组
@@ -582,8 +566,7 @@ void manage_user_show_info(char username[])
     printf("资产数：%d\n", list[pos].asset_count); //显示有几个道具
 }
 
-//这个函数让用户自己修改信息
-//除了基本资料，也可以顺便录入游戏时长和胜负情况
+//让用户自己修改信息
 int manage_user_edit_info(char username[])
 {
     users list[MAX_USERS]; //用户数组
@@ -660,7 +643,6 @@ int manage_user_edit_info(char username[])
 }
 
 //管理员查看全部用户
-//这里主要是为了管理方便
 void manage_user_list_all(void)
 {
     users list[MAX_USERS]; //用户数组
@@ -686,7 +668,6 @@ void manage_user_list_all(void)
 }
 
 //管理员手动升级用户
-//和自动升级不同，这里是直接改角色等级
 int manage_user_upgrade(void)
 {
     users list[MAX_USERS]; //用户数组
@@ -713,7 +694,6 @@ int manage_user_upgrade(void)
 }
 
 //管理员手动降级用户
-//如果需要恢复普通权限就可以在这里操作
 int manage_user_degrade(void)
 {
     users list[MAX_USERS]; //用户数组
@@ -740,7 +720,6 @@ int manage_user_degrade(void)
 }
 
 //管理员删除用户
-//这里是把数组后面的内容往前移一位
 int manage_user_delete(void)
 {
     users list[MAX_USERS]; //用户数组
@@ -768,7 +747,6 @@ int manage_user_delete(void)
 }
 
 //添加好友
-//双方都会互相进入对方的好友列表
 int manage_friend_add(char username[])
 {
     users list[MAX_USERS]; //用户数组
@@ -809,7 +787,6 @@ int manage_friend_add(char username[])
 }
 
 //删除好友
-//这里也是双向删除，不是只删一边
 int manage_friend_remove(char username[])
 {
     users list[MAX_USERS]; //用户数组
@@ -858,7 +835,6 @@ int manage_friend_remove(char username[])
 }
 
 //显示当前用户的好友列表
-//这里会把好友ID再对应回好友名字
 void manage_friend_list(char username[])
 {
     users list[MAX_USERS]; //用户数组
@@ -945,7 +921,6 @@ int manage_friend_invite(char username[])
 }
 
 //查看和自己有关的邀约记录
-//不管是你发出去的还是别人发给你的都会显示
 void manage_friend_show_invite(char username[])
 {
     invite_log logs[MAX_MARKET]; //邀约记录数组
@@ -1022,7 +997,6 @@ void manage_show_recommend_games(char username[])
 }
 
 //好友菜单
-//把好友相关功能集中放在这里
 void manage_show_friend_menu(char username[])
 {
     int choice; //用户选择
@@ -1054,7 +1028,6 @@ void manage_show_friend_menu(char username[])
 }
 
 //个人信息菜单
-//查看和修改个人资料都从这里进入
 void manage_show_user_info_menu(char username[])
 {
     int choice; //用户选择
@@ -1077,7 +1050,6 @@ void manage_show_user_info_menu(char username[])
 }
 
 //管理员菜单
-//管理员可以在这里管用户
 void manage_show_admin_menu(void)
 {
     int choice; //用户选择
@@ -1106,7 +1078,6 @@ void manage_show_admin_menu(void)
 }
 
 //把市场里现在所有在售的道具列出来
-//用户买东西之前会先看这里
 void trade_show_market(void)
 {
     market list[MAX_MARKET]; //市场道具数组
@@ -1213,7 +1184,7 @@ int trade_publish_item(char username[])
 }
 
 //购买道具
-//买家扣钱，卖家加钱，同时还会写交易记录
+//买家扣钱，卖家加钱，同时写交易记录
 int trade_buy_item(char username[])
 {
     market list[MAX_MARKET]; //市场数组
@@ -1293,7 +1264,6 @@ int trade_buy_item(char username[])
 }
 
 //交易菜单
-//市场查看、上架、购买、交易记录都在这里
 void trade_menu(char username[])
 {
     int choice; //用户选择
@@ -1384,8 +1354,7 @@ void main_show_ranking(void)
     }
 }
 
-//如果输入的用户名还不存在
-//那这里就当作第一次注册来处理
+//如果输入的用户名还不存在，就当作第一次注册来处理
 void main_first_register(char username[])
 {
     users user = {0}; //新用户变量，初始化为0
