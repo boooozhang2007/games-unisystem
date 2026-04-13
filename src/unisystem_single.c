@@ -1,61 +1,61 @@
-#include <stdio.h> //引入标准输入输出的头文件，没这个printf和scanf都用不了
-#include <stdlib.h> //引入标准库的头文件，里面有一些常用工具函数
-#include <string.h> //引入字符串操作的头文件，像strcpy、strcmp这些都在里面
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 //数量上限
-#define MAX_USERS 500 //最多能存500个用户，再多就放不下了
+#define MAX_USERS 500 //最多能存500个用户
 #define MAX_GAMES 100 //最多能存100个游戏
 #define MAX_MARKET 200 //市场里最多200个道具
 #define MAX_FRIENDS 100 //每个人最多100个好友
 #define MAX_ASSETS 100 //每个人最多拥有100个资产
 
 //数据文件
-#define USER_FILE "users.dat" //用户数据存在这个文件里
-#define GAME_FILE "games.dat" //游戏数据存在这个文件里
-#define MARKET_FILE "market.dat" //市场道具数据存在这个文件里
-#define TRADE_LOG_FILE "trade_log.dat" //交易记录存在这个文件里
-#define INVITE_LOG_FILE "invite_log.dat" //好友邀约记录存在这个文件里
-#define ID_FILE "id.dat" //自增编号存在这个文件里
+#define USER_FILE "users.dat" //用户数据
+#define GAME_FILE "games.dat" //游戏数据
+#define MARKET_FILE "market.dat" //市场道具数据
+#define TRADE_LOG_FILE "trade_log.dat" //交易记录
+#define INVITE_LOG_FILE "invite_log.dat" //好友邀约记录
+#define ID_FILE "id.dat" //自增编号
 
 //用户资料
 typedef struct { //定义一个结构体，用来装用户的所有信息
-    int id; //用户的编号，每个人不一样
-    char username[50]; //用户名，最多49个字符
-    char passwd[50]; //密码，也是最多49个字符
+    int id; //用户的编号
+    char username[50]; //用户名
+    char passwd[50]; //密码
     int age; //年龄
     char identity[30]; //身份或者职业，比如学生、老师
     char hobby[30]; //爱好，比如竞技、休闲
     int role;//0普通用户 1VIP 2管理员
-    int coins; //金币数量，可以用来买东西
-    int game_hours; //游戏时长，玩了多少小时
-    int play_count; //总共打了几把
-    int win_count; //赢了几把
+    int coins; //金币数量
+    int game_hours; //游戏时长
+    int play_count; //总对局数
+    int win_count; //赢的局数
     int friend_count; //好友数量
-    int asset_count; //拥有的资产数量
-    int friends[MAX_FRIENDS]; //好友列表，存的是好友的id
-    int assets[MAX_ASSETS]; //资产列表，存的是道具的id
-} users; //给这个结构体取个名字叫users
+    int asset_count; //资产数量
+    int friends[MAX_FRIENDS]; //好友列表
+    int assets[MAX_ASSETS]; //资产列表
+} users;
 
 //游戏资料
-typedef struct { //再定义一个结构体，用来装游戏信息
+typedef struct {
     int game_id; //游戏编号
     char game_name[50]; //游戏名称
     char game_type[30]; //游戏类型，比如竞技、冒险
     char game_desc[100]; //游戏简介
     int need_age; //最低年龄要求
-} games; //取名叫games
+} games;
 
 //市场资料
-typedef struct { //这个结构体装的是市场里的道具信息
+typedef struct {
     int item_id; //道具编号
     char item_name[50]; //道具名称
     char item_type[30]; //道具类型
     int item_price; //道具价格
     int seller_id; //卖家的用户id
-} market; //取名叫market
+} market;
 
 //交易记录
-typedef struct { //这个结构体用来记录每次交易的详细信息
+typedef struct {
     int buyer_id; //买家的用户id
     int seller_id; //卖家的用户id
     char buyer_name[50]; //买家用户名
@@ -64,96 +64,95 @@ typedef struct { //这个结构体用来记录每次交易的详细信息
     char item_name[50]; //交易的道具名称
     char item_type[30]; //交易的道具类型
     int item_price; //交易价格
-} trade_log; //取名叫trade_log
+} trade_log;
 
 //好友邀约记录
-typedef struct { //这个结构体用来记录好友邀请玩游戏的信息
+typedef struct {
     int send_id; //发起邀约的人的id
     int recv_id; //被邀约的人的id
     char send_name[50]; //发起人的用户名
     char recv_name[50]; //被邀约人的用户名
     char game_name[50]; //邀约玩的游戏名称
-} invite_log; //取名叫invite_log
+} invite_log;
 
 //crud部分
-void crud_init(void); //初始化函数的声明
-void crud_write_default_games(void); //写默认游戏数据的函数声明
-int crud_next_id(void); //获取下一个编号的函数声明
-int crud_load_users(users list[]); //读取所有用户的函数声明
-void crud_save_users(users list[], int num); //保存所有用户的函数声明
-int crud_load_games(games list[]); //读取所有游戏的函数声明
-int crud_load_market(market list[]); //读取市场道具的函数声明
-void crud_save_market(market list[], int num); //保存市场道具的函数声明
-int crud_load_trade_logs(trade_log list[]); //读取交易记录的函数声明
-void crud_add_trade_log(trade_log* log_data); //添加交易记录的函数声明
-int crud_load_invite_logs(invite_log list[]); //读取邀约记录的函数声明
-void crud_add_invite_log(invite_log* log_data); //添加邀约记录的函数声明
-int crud_find_user_index(users list[], int num, char username[]); //按用户名找位置的函数声明
-int crud_find_user_id_index(users list[], int num, int id); //按id找位置的函数声明
-int crud_find_market_index(market list[], int num, int item_id); //按道具id找位置的函数声明
+void crud_init(void); //初始化函数
+void crud_write_default_games(void); //写默认游戏数据
+int crud_next_id(void); //获取下一个编号
+int crud_load_users(users list[]); //读取所有用户
+void crud_save_users(users list[], int num); //保存所有用户
+int crud_load_games(games list[]); //读取所有游戏
+int crud_load_market(market list[]); //读取市场道具
+void crud_save_market(market list[], int num); //保存市场道具
+int crud_load_trade_logs(trade_log list[]); //读取交易记录
+void crud_add_trade_log(trade_log* log_data); //添加交易记录
+int crud_load_invite_logs(invite_log list[]); //读取邀约记录
+void crud_add_invite_log(invite_log* log_data); //添加邀约记录
+int crud_find_user_index(users list[], int num, char username[]); //按用户名找位置
+int crud_find_user_id_index(users list[], int num, int id); //按id找位置
+int crud_find_market_index(market list[], int num, int item_id); //按道具id找位置
 
 //manage部分
-void manage_create_first_admin(void); //创建默认管理员的函数声明
-int manage_user_register(users* user); //用户注册的函数声明
-int manage_user_login(char username[], char passwd[]); //用户登录的函数声明
-int manage_get_win_rate(users* user); //计算胜率的函数声明
-void manage_user_auto_upgrade(users* user); //自动升级的函数声明
-void manage_user_show_info(char username[]); //显示用户信息的函数声明
-int manage_user_edit_info(char username[]); //修改用户信息的函数声明
-void manage_user_list_all(void); //列出所有用户的函数声明
-int manage_user_upgrade(void); //手动升级用户的函数声明
-int manage_user_degrade(void); //手动降级用户的函数声明
-int manage_user_delete(void); //删除用户的函数声明
-int manage_friend_add(char username[]); //添加好友的函数声明
-int manage_friend_remove(char username[]); //删除好友的函数声明
-void manage_friend_list(char username[]); //查看好友列表的函数声明
-int manage_friend_invite(char username[]); //好友邀约的函数声明
-void manage_friend_show_invite(char username[]); //查看邀约记录的函数声明
-void manage_show_recommend_games(char username[]); //推荐游戏的函数声明
-void manage_show_friend_menu(char username[]); //好友菜单的函数声明
-void manage_show_user_info_menu(char username[]); //个人信息菜单的函数声明
-void manage_show_admin_menu(void); //管理员菜单的函数声明
+void manage_create_first_admin(void); //创建默认管理员
+int manage_user_register(users* user); //用户注册
+int manage_user_login(char username[], char passwd[]); //用户登录
+int manage_get_win_rate(users* user); //计算胜率
+void manage_user_auto_upgrade(users* user); //自动升级
+void manage_user_show_info(char username[]); //显示用户信息
+int manage_user_edit_info(char username[]); //修改用户信息
+void manage_user_list_all(void); //列出所有用户
+int manage_user_upgrade(void); //手动升级用户
+int manage_user_degrade(void); //手动降级用户
+int manage_user_delete(void); //删除用户
+int manage_friend_add(char username[]); //添加好友
+int manage_friend_remove(char username[]); //删除好友
+void manage_friend_list(char username[]); //查看好友列表
+int manage_friend_invite(char username[]); //好友邀约
+void manage_friend_show_invite(char username[]); //查看邀约记录
+void manage_show_recommend_games(char username[]); //推荐游戏
+void manage_show_friend_menu(char username[]); //好友菜单
+void manage_show_user_info_menu(char username[]); //个人信息菜单
+void manage_show_admin_menu(void); //管理员菜单
 
 //trade部分
-void trade_show_market(void); //展示市场的函数声明
-void trade_show_log(char username[]); //展示交易记录的函数声明
-int trade_publish_item(char username[]); //上架道具的函数声明
-int trade_buy_item(char username[]); //购买道具的函数声明
-void trade_menu(char username[]); //交易菜单的函数声明
+void trade_show_market(void); //展示市场
+void trade_show_log(char username[]); //展示交易记录
+int trade_publish_item(char username[]); //上架道具
+int trade_buy_item(char username[]); //购买道具
+void trade_menu(char username[]); //交易菜单
 
 //main部分
-int main_show_menu(int role); //主菜单的函数声明
-void main_show_ranking(void); //排行榜的函数声明
-void main_first_register(char username[]); //第一次注册的函数声明
+int main_show_menu(int role); //主菜单
+void main_show_ranking(void); //排行榜
+void main_first_register(char username[]); //第一次注册
 
-//这个函数是程序一开始要先调用的
-//主要就是把后面要用到的数据文件先准备好
+//初始化函数
 void crud_init(void)
 {
-    FILE* fp; //声明一个文件指针，后面开文件要用
+    FILE* fp;
     int id_value = 0; //初始编号设成0
 
     fp = fopen(USER_FILE, "ab"); //用追加模式打开用户文件，文件不存在会自动创建
-    if (fp != NULL) fclose(fp); //打开成功就关掉，目的只是确保文件存在
+    if (fp != NULL) fclose(fp);
 
     fp = fopen(MARKET_FILE, "ab"); //同样的方式打开市场文件
-    if (fp != NULL) fclose(fp); //打开成功就关掉
+    if (fp != NULL) fclose(fp);
 
     fp = fopen(TRADE_LOG_FILE, "ab"); //打开交易记录文件
-    if (fp != NULL) fclose(fp); //成功了就关掉
+    if (fp != NULL) fclose(fp);
 
     fp = fopen(INVITE_LOG_FILE, "ab"); //打开邀约记录文件
-    if (fp != NULL) fclose(fp); //成功了就关掉
+    if (fp != NULL) fclose(fp);
 
     fp = fopen(GAME_FILE, "ab"); //打开游戏数据文件
-    if (fp != NULL) fclose(fp); //成功了就关掉
+    if (fp != NULL) fclose(fp);
 
     fp = fopen(ID_FILE, "rb"); //试着用读模式打开编号文件
     if (fp == NULL) { //如果打开失败说明文件不存在
         fp = fopen(ID_FILE, "wb"); //那就用写模式创建一个新的
         if (fp != NULL) { //如果创建成功了
             fwrite(&id_value, sizeof(int), 1, fp); //把初始编号0写进去
-            fclose(fp); //写完关文件
+            fclose(fp);
         }
     } else { //如果文件已经存在了
         fclose(fp); //那就直接关掉不用管了
@@ -163,61 +162,60 @@ void crud_init(void)
     crud_write_default_games(); //调用函数写入默认的游戏数据
 }
 
-//这里是写默认游戏数据的
-//如果游戏文件里还没有内容，就先放几款热门游戏进去
+//写默认游戏数据
 void crud_write_default_games(void)
 {
-    FILE* fp; //文件指针
-    long size; //记录文件大小用的
+    FILE* fp;
+    long size;
     games list[6] = { //预设6款游戏的数据
         {1, "王者荣耀", "竞技", "5V5多人在线竞技游戏", 12}, //王者荣耀，竞技类，12岁以上
         {2, "原神", "冒险", "开放世界角色扮演游戏", 12}, //原神，冒险类
         {3, "第五人格", "竞技", "非对称对抗竞技游戏", 12}, //第五人格，竞技类
         {4, "和平精英", "竞技", "多人战术射击游戏", 12}, //和平精英，竞技类
-        {5, "蛋仔派对", "休闲", "多人闯关休闲派对游戏", 6}, //蛋仔派对，休闲类，6岁就能玩
+        {5, "蛋仔派对", "休闲", "多人闯关休闲派对游戏", 6}, //蛋仔派对，休闲类，6岁以上
         {6, "阴阳师", "养成", "和风卡牌养成策略游戏", 12} //阴阳师，养成类
     };
     int num; //记录游戏数量
 
     fp = fopen(GAME_FILE, "rb"); //用读模式打开游戏文件
-    if (fp == NULL) return; //打不开就直接返回
+    if (fp == NULL) return;
 
     fseek(fp, 0, SEEK_END); //把文件指针移到文件末尾
     size = ftell(fp); //看看现在指针在哪，就知道文件多大了
-    fclose(fp); //关掉文件
+    fclose(fp);
 
-    if (size > 0) return; //文件有内容了就不用再写了
+    if (size > 0) return;
 
     fp = fopen(GAME_FILE, "wb"); //用写模式打开游戏文件
-    if (fp == NULL) return; //打不开就返回
+    if (fp == NULL) return;
 
     num = 6; //一共6个游戏
     fwrite(list, sizeof(games), num, fp); //把所有游戏数据一次性写进文件
-    fclose(fp); //关文件
+    fclose(fp);
 }
 
 //这个函数专门用来生成新的编号
 //每次注册用户或者上架道具时都会用到
 int crud_next_id(void)
 {
-    FILE* fp; //文件指针
+    FILE* fp;
     int id_value = 0; //先给编号一个初始值0
 
     fp = fopen(ID_FILE, "rb"); //用读模式打开编号文件
-    if (fp == NULL) return -1; //打不开就返回-1表示出错
+    if (fp == NULL) return -1;
 
     if (fread(&id_value, sizeof(int), 1, fp) != 1) { //试着从文件读出当前编号
         id_value = 0; //读失败就当成0
     }
-    fclose(fp); //关文件
+    fclose(fp);
 
     id_value++; //编号加1，这样每次调用编号都不一样
 
     fp = fopen(ID_FILE, "wb"); //用写模式打开编号文件
-    if (fp == NULL) return -1; //打不开就返回-1
+    if (fp == NULL) return -1;
 
     fwrite(&id_value, sizeof(int), 1, fp); //把新编号写回文件
-    fclose(fp); //关文件
+    fclose(fp);
 
     return id_value; //返回这个新编号
 }
@@ -226,12 +224,12 @@ int crud_next_id(void)
 //后面查找、修改、登录基本都要先调用它
 int crud_load_users(users list[])
 {
-    FILE* fp; //文件指针
+    FILE* fp;
     int num = 0; //计数器，记录读了几个用户
     users one_user; //临时变量，每次读一个用户先放这里
 
     fp = fopen(USER_FILE, "rb"); //用读模式打开用户文件
-    if (fp == NULL) return 0; //打不开就返回0表示没读到
+    if (fp == NULL) return 0;
 
     while (fread(&one_user, sizeof(users), 1, fp) == 1) { //一个一个读用户，读成功就继续
         if (num < MAX_USERS) { //只要还没超过上限
@@ -240,8 +238,8 @@ int crud_load_users(users list[])
         }
     }
 
-    fclose(fp); //读完了关文件
-    return num; //返回一共读了几个用户
+    fclose(fp);
+    return num; //返回读取到的用户数量
 }
 
 //这个函数负责把用户数组重新写回文件
